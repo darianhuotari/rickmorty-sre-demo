@@ -35,6 +35,7 @@ def test_healthcheck_route(monkeypatch):
     assert j["cache_populated"] is True
     assert j["cache_age_sec"] == 1.23
 
+
 def test_root_redirects_to_docs():
     client = TestClient(app, follow_redirects=False)
     resp = client.get("/")

@@ -6,6 +6,7 @@ from . import api
 
 app = FastAPI(title="Rick & Morty Characters", version="0.2.0")
 
+
 @app.get("/", include_in_schema=False)
 async def root():
     # Use FastAPI’s configured docs URL if present; fallback to "/docs"
