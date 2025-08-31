@@ -6,7 +6,6 @@ on:
   pull_request:
     branches: [ main ]
 
-# Cancel older runs for the same branch/PR when new commits arrive
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -14,7 +13,6 @@ concurrency:
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
-
     strategy:
       fail-fast: false
       matrix:
@@ -28,39 +26,23 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: "pip"
+          cache: pip
 
-      - name: Upgrade pip
-        run: python -m pip install --upgrade pip
+      # Make handles venv creation + installs (no activation needed)
+      - name: Install deps (runtime + dev)
+        run: make dev
 
-      - name: Install dependencies (runtime + dev) in venv
-        run: |
-          python -m venv .venv
-          . .venv/bin/activate
-          pip install -r requirements.txt
-          pip install -r requirements-dev.txt
-        shell: bash
+      - name: Lint
+        run: make lint
 
-      - name: Lint (black check + flake8)
-        run: |
-          . .venv/bin/activate
-          make lint
-        shell: bash
+      - name: Test (coverage >= 80%)
+        run: make test
 
-      - name: Test (pytest w/ coverage threshold)
-        run: |
-          . .venv/bin/activate
-          make test
-        shell: bash
-
-      - name: Generate HTML coverage (only once)
+      - name: Generate HTML coverage (only on 3.12)
         if: matrix.python-version == '3.12'
-        run: |
-          . .venv/bin/activate
-          make coverage
-        shell: bash
+        run: make coverage
 
-      - name: Upload coverage artifact (HTML)
+      - name: Upload coverage HTML artifact
         if: matrix.python-version == '3.12'
         uses: actions/upload-artifact@v4
         with:
