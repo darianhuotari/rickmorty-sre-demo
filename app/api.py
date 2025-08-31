@@ -1,65 +1,135 @@
+import os
+import time
+import random
 import asyncio
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy.orm import Session
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import SlowAPIMiddleware
+from typing import List, Dict, Any, Tuple
 
-from app.db import get_db
-from app.schemas import CharacterOut
-from app.crud import list_characters, upsert_characters, count_characters
-from app.clients import fetch_filtered_characters
-from app.cache import cache_get, cache_set
+import httpx
+from fastapi import HTTPException
 
-bootstrap_lock = asyncio.Lock()
-_bootstrapped = False
+BASE_URL = "https://rickandmortyapi.com/api/character"
+CACHE_TTL = int(os.getenv("CACHE_TTL", "300"))  # seconds
+MAX_RETRIES = int(os.getenv("MAX_RETRIES", "5"))
+REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "10"))
+
+# very simple in-memory cache
+_cache: Dict[str, Any] = {"ts": 0.0, "data": None}
 
 
-router = APIRouter()
-limiter = Limiter(key_func=get_remote_address)
-
-# Attach rate limit exception handler for the parent FastAPI app in main.py
-@router.get("/characters", response_model=list[CharacterOut])
-@limiter.limit("60/minute")
-async def get_characters(
-    request: Request,
-    sort_by: str = Query("id", pattern="^(id|name)$"),
-    order: str = Query("asc", pattern="^(asc|desc)$"),
-    limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db)
+async def _request_with_retry(
+    client: httpx.AsyncClient, url: str, params: Dict[str, Any]
 ):
-    global _bootstrapped
-    if not _bootstrapped and count_characters(db) == 0:
-        async with bootstrap_lock:
-            if not _bootstrapped and count_characters(db) == 0:
-                try:
-                    items = await fetch_filtered_characters()
-                    upsert_characters(db, items)
-                    _bootstrapped = True
-                except Exception as e:
-                    raise HTTPException(status_code=503, detail=f"Bootstrap sync failed: {e}")
+    """Internal helper: GET with retries/backoff for 429 + 5xx and transient errors."""
+    backoff = 0.5
+    for _ in range(1, MAX_RETRIES + 1):
+        try:
+            r = await client.get(url, params=params, timeout=REQUEST_TIMEOUT)
+            if r.status_code == 429 or 500 <= r.status_code < 600:
+                ra = r.headers.get("Retry-After")
+                delay = (
+                    float(ra)
+                    if ra and ra.isdigit()
+                    else backoff + random.random() * 0.25
+                )
+                await asyncio.sleep(delay)
+                backoff = min(backoff * 2, 8.0)
+                continue
+            r.raise_for_status()
+            return r
+        except (
+            httpx.ReadTimeout,
+            httpx.ConnectTimeout,
+            httpx.RemoteProtocolError,
+            httpx.TransportError,
+        ):
+            await asyncio.sleep(backoff)
+            backoff = min(backoff * 2, 8.0)
+    raise HTTPException(
+        status_code=503, detail="Upstream API unavailable after retries"
+    )
 
-    key = ("characters", sort_by, order, limit, offset)
-    cached = cache_get(key)
-    if cached is not None:
-        return cached
 
-    # 👇 Wrap DB access robustly
+# ---------------------------------------------------------------------
+# Public functions
+# ---------------------------------------------------------------------
+
+
+async def fetch_all_characters() -> List[Dict[str, Any]]:
+    """
+    Fetch *all* characters from the upstream API, handling pagination + retries.
+    Returns raw character dicts as provided by the Rick & Morty API.
+    """
+    results: List[Dict[str, Any]] = []
+    page = 1
+    async with httpx.AsyncClient() as client:
+        while True:
+            params = {"page": page}
+            resp = await _request_with_retry(client, BASE_URL, params)
+            data = resp.json()
+            results.extend(data.get("results", []))
+            if not (data.get("info") or {}).get("next"):
+                break
+            page += 1
+    return results
+
+
+def filter_character_results(characters: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Apply assignment filters:
+      - species == Human
+      - status == Alive
+      - origin starts with 'Earth'
+    Returns a slimmed dict with only relevant fields.
+    """
+    out: List[Dict[str, Any]] = []
+    for ch in characters:
+        if ch.get("species") != "Human" or ch.get("status") != "Alive":
+            continue
+        origin = (ch.get("origin") or {}).get("name") or ""
+        if origin.startswith("Earth"):
+            out.append(
+                {
+                    "id": ch.get("id"),
+                    "name": ch.get("name"),
+                    "status": ch.get("status"),
+                    "species": ch.get("species"),
+                    "origin": origin,
+                    "image": ch.get("image"),
+                    "url": ch.get("url"),
+                }
+            )
+    return out
+
+
+async def get_characters() -> List[Dict[str, Any]]:
+    """
+    Service-facing function: returns filtered characters,
+    with caching for CACHE_TTL seconds.
+    """
+    now = time.time()
+    if _cache["data"] is not None and now - _cache["ts"] < CACHE_TTL:
+        return _cache["data"]
+
+    raw = await fetch_all_characters()
+    filtered = filter_character_results(raw)
+
+    _cache["ts"] = time.time()
+    _cache["data"] = filtered
+    return filtered
+
+
+def cache_info() -> Tuple[bool, float | None]:
+    """Return whether cache is populated and its age in seconds."""
+    if _cache["ts"] == 0:
+        return False, None
+    return (_cache["data"] is not None, round(time.time() - _cache["ts"], 2))
+
+
+async def quick_upstream_probe() -> bool:
+    """Lightweight probe to upstream root API endpoint."""
     try:
-        rows = list_characters(db, sort_by, order, limit, offset)
-    except Exception as e:
-        # Always map to 503
-        raise HTTPException(status_code=503, detail=f"DB query failed: {e}")
-
-    payload = [CharacterOut.model_validate(r, from_attributes=True).model_dump() for r in rows]
-    cache_set(key, payload)
-    return payload
-
-@router.post("/sync")
-async def sync(db: Session = Depends(get_db)):
-    items = await fetch_filtered_characters()
-    upserted = upsert_characters(db, items)
-    total = count_characters(db)
-    return {"upserted": upserted, "total": total}
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get("https://rickandmortyapi.com/api")
+            return r.status_code == 200
+    except Exception:
+        return False

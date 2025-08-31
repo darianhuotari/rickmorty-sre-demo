@@ -6,16 +6,22 @@ on:
   pull_request:
     branches: [ main ]
 
+# Cancel older runs for the same branch/PR when new commits arrive
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
+  lint-and-test:
     runs-on: ubuntu-latest
 
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
 
     steps:
-      - name: Checkout repo
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up Python ${{ matrix.python-version }}
@@ -24,18 +30,42 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
 
-      - name: Install dependencies
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install dependencies (runtime + dev) in venv
         run: |
-          python -m pip install --upgrade pip
+          python -m venv .venv
+          . .venv/bin/activate
           pip install -r requirements.txt
-          pip install -r requirements-dev.txt || true
+          pip install -r requirements-dev.txt
+          # editable install for 'app' package
+          pip install -e .
+        shell: bash
 
-      - name: Run tests with coverage
+      - name: Lint (black check + flake8)
         run: |
-          pytest -vv --disable-warnings --cov=app --cov-report=xml --cov-fail-under=80
+          . .venv/bin/activate
+          make lint
+        shell: bash
 
-      - name: Upload coverage report
+      - name: Test (pytest w/ coverage threshold)
+        run: |
+          . .venv/bin/activate
+          make test
+        shell: bash
+
+      - name: Generate HTML coverage (only once)
+        if: matrix.python-version == '3.12'
+        run: |
+          . .venv/bin/activate
+          make coverage
+        shell: bash
+
+      - name: Upload coverage artifact (HTML)
+        if: matrix.python-version == '3.12'
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-xml-py${{ matrix.python-version }}
-          path: coverage.xml
+          name: coverage-html-${{ github.run_id }}
+          path: htmlcov/
+          if-no-files-found: warn
