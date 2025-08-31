@@ -1,6 +1,7 @@
 import pytest
 from app import api
 
+
 @pytest.mark.asyncio
 async def test_fetch_all_characters_retries_then_succeeds(monkeypatch):
     """
@@ -19,9 +20,7 @@ async def test_fetch_all_characters_retries_then_succeeds(monkeypatch):
 
         def raise_for_status(self):
             if self.status_code >= 400:
-                raise api.httpx.HTTPStatusError(
-                    "err", request=None, response=None
-                )
+                raise api.httpx.HTTPStatusError("err", request=None, response=None)
 
     # Two pages of data
     page1_ok = FakeResp(
@@ -53,8 +52,11 @@ async def test_fetch_all_characters_retries_then_succeeds(monkeypatch):
     idx = {"i": 0}
 
     class FakeClient:
-        async def __aenter__(self): return self
-        async def __aexit__(self, *a): return False
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
 
         async def get(self, url, params=None, timeout=None):
             i = idx["i"]
@@ -83,25 +85,31 @@ async def test_fetch_all_characters_transport_error_then_success(monkeypatch):
 
     class FakeResp:
         status_code = 200
+
         def __init__(self, payload):
             self._payload = payload
             self.headers = {}
-        def json(self): return self._payload
-        def raise_for_status(self): return None
+
+        def json(self):
+            return self._payload
+
+        def raise_for_status(self):
+            return None
 
     # First call raises a transport error; second returns OK.
-    calls = [
-        FakeTransportError(),
-        FakeResp({"results": [], "info": {"next": None}})
-    ]
+    calls = [FakeTransportError(), FakeResp({"results": [], "info": {"next": None}})]
     idx = {"i": 0}
 
     class FakeClient:
-        async def __aenter__(self): return self
-        async def __aexit__(self, *a): return False
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
 
         async def get(self, url, params=None, timeout=None):
-            i = idx["i"]; idx["i"] += 1
+            i = idx["i"]
+            idx["i"] += 1
             v = calls[i]
             if isinstance(v, Exception):
                 # simulate httpx.TransportError
@@ -112,11 +120,16 @@ async def test_fetch_all_characters_transport_error_then_success(monkeypatch):
     results = await api.fetch_all_characters()
     assert results == []  # empty page returned after retry
 
+
 @pytest.mark.asyncio
 async def test_quick_upstream_probe_returns_false_on_exception(monkeypatch):
     class FakeClient:
-        async def __aenter__(self): return self
-        async def __aexit__(self, *a): return False
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
         async def get(self, url):  # simulate exception during GET
             raise api.httpx.ConnectTimeout("timeout")
 

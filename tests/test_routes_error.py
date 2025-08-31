@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app import api
 
+
 def test_characters_route_400_when_name_not_string(monkeypatch):
     async def fake_get_characters():
         # name is None -> calling .lower() throws AttributeError

@@ -1,6 +1,7 @@
 import pytest
 from app import api
 
+
 @pytest.mark.asyncio
 async def test_fetch_all_characters_exhausts_retries_and_raises(monkeypatch):
     """
@@ -12,13 +13,18 @@ async def test_fetch_all_characters_exhausts_retries_and_raises(monkeypatch):
     class FakeResp:
         status_code = 500
         headers = {}
+
         def raise_for_status(self):
             # Simulate httpx raising for 500 to match code path after retry
             raise api.httpx.HTTPStatusError("err", request=None, response=None)
 
     class FakeClient:
-        async def __aenter__(self): return self
-        async def __aexit__(self, *a): return False
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
         async def get(self, *a, **k):  # always returns a 500 response
             return FakeResp()
 
@@ -39,12 +45,17 @@ async def test_quick_upstream_probe_true_branch(monkeypatch):
     which wasn’t covered because route tests mocked the function.
     Covers the True return (~line 125).
     """
+
     class FakeResp:
         status_code = 200
 
     class FakeClient:
-        async def __aenter__(self): return self
-        async def __aexit__(self, *a): return False
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
         async def get(self, url):
             return FakeResp()
 

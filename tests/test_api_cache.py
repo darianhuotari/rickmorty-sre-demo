@@ -1,6 +1,7 @@
 import time
 from app import api
 
+
 def test_cache_info_populated():
     # Save & restore to avoid test leakage
     old_ts, old_data = api._cache["ts"], api._cache["data"]
