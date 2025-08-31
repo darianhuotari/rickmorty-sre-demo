@@ -1,59 +1,40 @@
-import os
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
-from sqlalchemy import text
-from sqlalchemy.exc import SQLAlchemyError
-from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import SlowAPIMiddleware
-from slowapi import _rate_limit_exceeded_handler
+from typing import List, Dict, Any
+from fastapi import FastAPI, HTTPException, Query
 
-from app.api import router as api_router, limiter
-from app.db import Base, engine, SessionLocal
-from app.cache import cache_stats
+from . import api
 
-APP_NAME = os.getenv("APP_NAME", "Rick & Morty Service")
-
-app = FastAPI(title=APP_NAME)
-
-# DB init (simple auto-create; migrations can come later)
-Base.metadata.create_all(bind=engine)
-
-# ✅ Rate limiting middleware & handler
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-app.add_middleware(SlowAPIMiddleware)
-
-# Routers
-app.include_router(api_router)
+app = FastAPI(title="Rick & Morty Characters", version="0.2.0")
 
 
 @app.get("/healthcheck")
-def healthcheck():
-    db_ok = False
-    try:
-        with SessionLocal() as db:
-            db.execute(text("SELECT 1"))
-            db_ok = True
-    except SQLAlchemyError:
-        db_ok = False
-
+async def healthcheck():
+    upstream_ok = await api.quick_upstream_probe()
+    populated, age = api.cache_info()
     return {
-        "status": "ok" if db_ok else "degraded",
-        "checks": {
-            "database": "ok" if db_ok else "error",
-            "cache": cache_stats(),
-        },
+        "status": "ok",
+        "upstream_ok": upstream_ok,
+        "cache_populated": populated,
+        "cache_age_sec": age,
     }
 
 
-# ✅ Global exception handler for DB-related errors
-@app.exception_handler(Exception)
-async def db_exception_handler(request: Request, exc: Exception):
-    # Treat common DB failures uniformly as 503
-    if isinstance(exc, (SQLAlchemyError, RuntimeError, AttributeError)):
-        return JSONResponse(
-            status_code=503,
-            content={"detail": "Service unavailable: database error"},
+@app.get("/characters")
+async def characters(
+    sort: str = Query("id", pattern=r"^(id|name)$"),
+    order: str = Query("asc", pattern=r"^(asc|desc)$"),
+):
+    items: List[Dict[str, Any]] = await api.get_characters()
+
+    reverse = order == "desc"
+    try:
+        characters_sorted = sorted(
+            items,
+            key=(
+                (lambda x: x["name"].lower()) if sort == "name" else (lambda x: x["id"])
+            ),
+            reverse=reverse,
         )
-    # Let other unexpected exceptions bubble up
-    raise exc
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid sort parameter")
+
+    return {"count": len(characters_sorted), "results": characters_sorted}
