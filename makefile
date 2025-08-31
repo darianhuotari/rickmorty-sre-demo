@@ -1,4 +1,4 @@
-# Python virtualenv
+# Python virtualenv (Windows)
 VENV ?= .venv
 PYTHON = $(VENV)/Scripts/python.exe
 PIP = $(VENV)/Scripts/pip.exe
@@ -34,7 +34,6 @@ install: venv
 
 dev: install
 	$(PIP) install -r requirements-dev.txt
-	$(PIP) install -e .
 
 run:
 	$(PYTHON) -m uvicorn app.main:app --reload --port 8000
