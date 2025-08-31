@@ -30,7 +30,6 @@ async def get_characters(
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db)
 ):
-    # ---- Lazy bootstrap if DB is empty (one-time per process) ----
     global _bootstrapped
     if not _bootstrapped and count_characters(db) == 0:
         async with bootstrap_lock:
@@ -40,16 +39,18 @@ async def get_characters(
                     upsert_characters(db, items)
                     _bootstrapped = True
                 except Exception as e:
-                    # Keep the failure explicit for the caller; they can retry
                     raise HTTPException(status_code=503, detail=f"Bootstrap sync failed: {e}")
+
     key = ("characters", sort_by, order, limit, offset)
     cached = cache_get(key)
     if cached is not None:
         return cached
 
+    # 👇 Wrap DB access robustly
     try:
         rows = list_characters(db, sort_by, order, limit, offset)
     except Exception as e:
+        # Always map to 503
         raise HTTPException(status_code=503, detail=f"DB query failed: {e}")
 
     payload = [CharacterOut.model_validate(r, from_attributes=True).model_dump() for r in rows]
@@ -58,10 +59,7 @@ async def get_characters(
 
 @router.post("/sync")
 async def sync(db: Session = Depends(get_db)):
-    try:
-        items = await fetch_filtered_characters()
-        upserted = upsert_characters(db, items)
-        total = count_characters(db)
-        return {"upserted": upserted, "total": total}
-    except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Sync failed: {e}")
+    items = await fetch_filtered_characters()
+    upserted = upsert_characters(db, items)
+    total = count_characters(db)
+    return {"upserted": upserted, "total": total}
