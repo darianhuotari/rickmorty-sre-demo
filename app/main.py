@@ -1,9 +1,15 @@
 from typing import List, Dict, Any
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import RedirectResponse
 
 from . import api
 
 app = FastAPI(title="Rick & Morty Characters", version="0.2.0")
+
+@app.get("/", include_in_schema=False)
+async def root():
+    # Use FastAPI’s configured docs URL if present; fallback to "/docs"
+    return RedirectResponse(url=app.docs_url or "/docs", status_code=307)
 
 
 @app.get("/healthcheck")
