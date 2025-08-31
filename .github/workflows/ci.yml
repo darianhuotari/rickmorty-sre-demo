@@ -39,8 +39,6 @@ jobs:
           . .venv/bin/activate
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
-          # editable install for 'app' package
-          pip install -e .
         shell: bash
 
       - name: Lint (black check + flake8)
