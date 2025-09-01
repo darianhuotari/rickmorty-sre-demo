@@ -13,6 +13,13 @@ REFRESH_TTL = int(os.getenv("REFRESH_TTL", "600"))  # seconds
 _last_refresh_ts: float | None = None
 
 
+def last_refresh_age() -> float | None:
+    """Return seconds since last refresh (rounded) or None if never refreshed."""
+    if _last_refresh_ts is None:
+        return None
+    return round(time.time() - _last_refresh_ts, 2)
+
+
 async def initial_sync_if_empty(session: AsyncSession) -> int:
     """Seed the database if the `characters` table is empty.
 
