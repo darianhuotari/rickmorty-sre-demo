@@ -1,3 +1,11 @@
+"""External Rick & Morty API client and lightweight data cache.
+
+This module encapsulates all interactions with the public Rick & Morty REST API,
+including robust retry/backoff behavior, pagination handling, and a very small
+in-process cache for call coalescing. It also exposes a quick upstream probe
+used by the application's health check.
+"""
+
 import os
 import time
 import random

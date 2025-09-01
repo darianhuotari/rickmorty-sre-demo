@@ -11,6 +11,7 @@ and the public REST endpoints:
 import math
 import os
 import asyncio
+import logging
 from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI, HTTPException, Query, Depends, Request
@@ -18,32 +19,34 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import RedirectResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# Rate limiting (required)
+# Rate limiting (leave as-is for now; you said you’ll remove it in a later PR)
 from slowapi import Limiter
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
 from . import api, crud, ingest
-from .db import get_session, init_db
+from .db import get_session, init_db, wait_for_db
 from .schemas import CharactersPage, HealthcheckOut, ProblemDetail
+from .logging_config import configure_logging
+
+configure_logging()
+log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------
 # App + rate limiter
 # ---------------------------------------------------------------------
 
-# Default per-IP rate; override in env (e.g., RATE_LIMIT="20/second")
 DEFAULT_RATE = os.getenv("RATE_LIMIT", "100/second")
 
 limiter = Limiter(
     key_func=get_remote_address,
-    default_limits=[DEFAULT_RATE],  # applies to all routes unless decorated differently
+    default_limits=[DEFAULT_RATE],
 )
 
 app = FastAPI(title="Rick & Morty Characters", version="0.6.0")
 app.state.limiter = limiter
 
-# map common titles
 _STATUS_TITLES = {
     400: "Bad Request",
     401: "Unauthorized",
@@ -76,7 +79,6 @@ def _problem(
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(_req: Request, exc: HTTPException):
-    # Normalize all HTTPExceptions to problem+json. Keep your 400 detail string intact.
     detail = exc.detail if isinstance(exc.detail, str) else None
     return _problem(
         status=exc.status_code, title=_STATUS_TITLES.get(exc.status_code), detail=detail
@@ -91,7 +93,6 @@ async def validation_exception_handler(_req: Request, exc: RequestValidationErro
 
 @app.exception_handler(RateLimitExceeded)
 async def ratelimit_exception_handler(_req: Request, exc: RateLimitExceeded):
-    # SlowAPI’s message varies; normalize it here.
     return _problem(
         status=429, title=_STATUS_TITLES[429], detail=f"Rate limit exceeded: {exc}"
     )
@@ -106,14 +107,24 @@ app.add_middleware(SlowAPIMiddleware)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan: initialize schema, seed (once), and run refresh daemon."""
+    """Application lifespan: wait for DB, init schema, seed (once), start refresher."""
+    # 1) Wait for the database to be reachable (cold-start friendly)
+    try:
+        await wait_for_db()
+    except Exception as exc:
+        log.error("Database is not reachable after retries: %s", exc)
+        # Let startup fail so K8s can restart us (or backoff)
+        raise
+
+    # 2) Create/upgrade schema
     await init_db()
-    # Seed once if empty
+
+    # 3) Seed once if empty (guarded by advisory-lock in ingest)
     async for session in get_session():
         await ingest.initial_sync_if_empty(session)
         break
 
-    # Optional background refresher (good for dev; prod can use a CronJob)
+    # 4) Optional background refresher (prod can use a CronJob instead)
     enabled = os.getenv("REFRESH_WORKER_ENABLED", "1") not in ("0", "false", "False")
     stop_event = asyncio.Event()
     task = None
@@ -123,13 +134,12 @@ async def lifespan(app: FastAPI):
 
         async def _refresher():
             while not stop_event.is_set():
-                # one short-lived session per iteration
                 async for s in get_session():
                     try:
                         await ingest.refresh_if_stale(s)
-                    except Exception:
+                    except Exception as exc:
                         # keep going; we don't want the task to die
-                        pass
+                        log.warning("Background refresh error (swallowed): %r", exc)
                     break
                 try:
                     await asyncio.wait_for(stop_event.wait(), timeout=interval)
@@ -160,7 +170,7 @@ _problem_resp = {
 
 
 @app.get("/", include_in_schema=False)
-async def root(request: Request):
+async def root(_request: Request):
     """Redirect the root path to the interactive API docs (/docs)."""
     return RedirectResponse(url=app.docs_url or "/docs", status_code=307)
 
@@ -172,11 +182,7 @@ async def root(request: Request):
 )
 @limiter.limit(DEFAULT_RATE)
 async def healthcheck(request: Request, session: AsyncSession = Depends(get_session)):
-    """Deep health check for upstream API and database.
-
-    Verifies upstream reachability, DB connectivity / refresh recency. Also returns the total
-    character count as a simple business metric.
-    """
+    """Deep health check for upstream API and database."""
     upstream_ok = await api.quick_upstream_probe()
 
     db_ok = True
@@ -213,17 +219,12 @@ async def characters(
     page_size: int = Query(20, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
 ):
-    """Return paginated, sorted characters from the database.
-
-    Raises:
-        HTTPException: 400 if a query error occurs (e.g., invalid sort/order).
-    """
+    """Return paginated, sorted characters from the database."""
     try:
         rows, total_count = await crud.list_characters(
             session, sort, order, page, page_size
         )
     except Exception:
-        # Keep your existing error shape so current tests continue to pass
         raise HTTPException(status_code=400, detail="Invalid sort parameter or query")
 
     total_pages = max(1, math.ceil(total_count / page_size))

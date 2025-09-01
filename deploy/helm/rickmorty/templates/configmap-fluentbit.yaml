@@ -1,0 +1,26 @@
+{{- if .Values.fluentbit.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "rickmorty.fullname" . }}-fluentbit
+  labels:
+    {{- include "rickmorty.labels" . | nindent 4 }}
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        Flush        1
+        Daemon       off
+        Log_Level    info
+
+    [INPUT]
+        Name        tail
+        Path        {{ .Values.fluentbit.inputPath }}
+        Tag         app.log
+        Mem_Buf_Limit 10MB
+        Skip_Long_Lines On
+
+    # Print to stdout for cluster log aggregation
+    [OUTPUT]
+        Name        stdout
+        Match       app.log
+{{- end }}

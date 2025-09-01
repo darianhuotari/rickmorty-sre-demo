@@ -1,0 +1,110 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "rickmorty.fullname" . }}
+  labels:
+    {{- include "rickmorty.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Chart.Name }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        {{- include "rickmorty.labels" . | nindent 8 }}
+      annotations:
+        # roll pods when ConfigMap/Secret changes
+        checksum/fluentbit: {{ include (print $.Template.BasePath "/configmap-fluentbit.yaml") . | sha256sum }}
+    spec:
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      volumes:
+        - name: app-logs
+          emptyDir: {}
+        {{- if .Values.fluentbit.enabled }}
+        - name: fluentbit-config
+          configMap:
+            name: {{ include "rickmorty.fullname" . }}-fluentbit
+        {{- end }}
+      containers:
+        - name: app
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: PORT
+              value: "8000"
+            - name: RATE_LIMIT
+              value: {{ .Values.env.RATE_LIMIT | quote }}
+            - name: CACHE_TTL
+              value: {{ .Values.env.CACHE_TTL | quote }}
+            - name: MAX_RETRIES
+              value: {{ .Values.env.MAX_RETRIES | quote }}
+            - name: REQUEST_TIMEOUT
+              value: {{ .Values.env.REQUEST_TIMEOUT | quote }}
+            - name: REFRESH_WORKER_ENABLED
+              value: {{ .Values.env.REFRESH_WORKER_ENABLED | quote }}
+            - name: REFRESH_INTERVAL
+              value: {{ .Values.env.REFRESH_INTERVAL | quote }}
+            - name: LOG_FILE_PATH
+              value: {{ .Values.env.LOG_FILE_PATH | quote }}
+
+            # DATABASE_URL: existingSecret -> -db -> -conn (when postgresql.enabled)
+            {{- if or .Values.database.existingSecret .Values.database.createSecret .Values.postgresql.enabled }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: "{{- if .Values.database.existingSecret -}}{{ .Values.database.existingSecret }}{{- else if .Values.database.createSecret -}}{{ include "rickmorty.fullname" . }}-db{{- else -}}{{ include "rickmorty.fullname" . }}-conn{{- end -}}"
+                  key: {{ .Values.database.key }}
+            {{- end }}
+
+            # REDIS_URL: existingSecret -> -ratelimit -> -conn (when redis.enabled)
+            {{- if or .Values.rateLimit.existingSecret .Values.rateLimit.createSecret .Values.redis.enabled }}
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: "{{- if .Values.rateLimit.existingSecret -}}{{ .Values.rateLimit.existingSecret }}{{- else if .Values.rateLimit.createSecret -}}{{ include "rickmorty.fullname" . }}-ratelimit{{- else -}}{{ include "rickmorty.fullname" . }}-conn{{- end -}}"
+                  key: {{ .Values.rateLimit.key | default "REDIS_URL" }}
+            {{- end }}
+
+
+          volumeMounts:
+            - name: app-logs
+              mountPath: /var/log/app
+          readinessProbe:
+            httpGet:
+              path: /healthcheck
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthcheck
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+        {{- if .Values.fluentbit.enabled }}
+        - name: fluent-bit
+          image: {{ .Values.fluentbit.image }}
+          imagePullPolicy: IfNotPresent
+          resources:
+            {{- toYaml .Values.fluentbit.resources | nindent 12 }}
+          volumeMounts:
+            - name: app-logs
+              mountPath: /var/log/app
+            - name: fluentbit-config
+              mountPath: /fluent-bit/etc/
+          args: ["-c", "/fluent-bit/etc/fluent-bit.conf"]
+        {{- end }}
