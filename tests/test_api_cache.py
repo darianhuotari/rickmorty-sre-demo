@@ -1,8 +1,15 @@
+"""Cache inspection tests for the upstream API module.
+
+Covers positive-path behavior of `cache_info()` when the in-process cache
+is populated and recently refreshed.
+"""
+
 import time
 from app import api
 
 
 def test_cache_info_populated():
+    """Report populated=True and a reasonable age when cache has data."""
     # Save & restore to avoid test leakage
     old_ts, old_data = api._cache["ts"], api._cache["data"]
     try:

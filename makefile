@@ -55,3 +55,47 @@ coverage:
 clean:
 	rm -rf __pycache__ .pytest_cache .mypy_cache .coverage htmlcov
 	rm -rf $(VENV)
+
+
+# -------- Docker Compose helpers (local dev) --------
+COMPOSE ?= docker compose
+PROJECT ?= rm
+COMPOSE_FILES := -f docker-compose.yml
+
+.PHONY: compose-up compose-up-d compose-down compose-logs app-logs db-logs app-exec db-psql compose-reset
+
+# Bring up Postgres + app in foreground (Ctrl+C to stop)
+compose-up:
+	$(COMPOSE) $(COMPOSE_FILES) -p $(PROJECT) up --build
+
+# Same, but detached
+compose-up-d:
+	$(COMPOSE) $(COMPOSE_FILES) -p $(PROJECT) up -d --build
+
+# Stop & remove containers (keeps DB volume)
+compose-down:
+	$(COMPOSE) $(COMPOSE_FILES) -p $(PROJECT) down
+
+# Tail combined logs
+compose-logs:
+	$(COMPOSE) $(COMPOSE_FILES) -p $(PROJECT) logs -f --tail=200
+
+# Tail only app or db logs
+app-logs:
+	$(COMPOSE) $(COMPOSE_FILES) -p $(PROJECT) logs -f --tail=200 app
+
+db-logs:
+	$(COMPOSE) $(COMPOSE_FILES) -p $(PROJECT) logs -f --tail=200 db
+
+# Run a command inside the app container (e.g., make app-exec CMD="pytest -q")
+CMD ?= echo "No CMD specified. Try: make app-exec CMD=\"pytest -q\""
+app-exec:
+	$(COMPOSE) $(COMPOSE_FILES) -p $(PROJECT) exec app /bin/sh -lc '$(CMD)'
+
+# Quick psql shell to the db (requires psql client inside the container)
+db-psql:
+	$(COMPOSE) $(COMPOSE_FILES) -p $(PROJECT) exec -e PGPASSWORD=secret db psql -U rmuser -d rm
+
+# Nuke containers + volumes (DESTROYS DB DATA)
+compose-reset:
+	$(COMPOSE) $(COMPOSE_FILES) -p $(PROJECT) down -v

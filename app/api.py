@@ -19,7 +19,22 @@ _cache: Dict[str, Any] = {"ts": 0.0, "data": None}
 async def _request_with_retry(
     client: httpx.AsyncClient, url: str, params: Dict[str, Any]
 ):
-    """Internal helper: GET with retries/backoff for 429 + 5xx and transient errors."""
+    """Issue a resilient GET request with exponential backoff and retry.
+
+    Retries on HTTP 429 and 5xx responses, honoring the `Retry-After` header when present,
+    and on common transient network errors (timeouts, transport issues).
+
+    Args:
+        client: An existing `httpx.AsyncClient` to use for the request.
+        url: Target URL to fetch.
+        params: Query parameters to include in the GET.
+
+    Returns:
+        The successful `httpx.Response`.
+
+    Raises:
+        HTTPException: If all retries are exhausted (503).
+    """
     backoff = 0.5
     for _ in range(1, MAX_RETRIES + 1):
         try:
@@ -55,9 +70,13 @@ async def _request_with_retry(
 
 
 async def fetch_all_characters() -> List[Dict[str, Any]]:
-    """
-    Fetch *all* characters from the upstream API, handling pagination + retries.
-    Returns raw character dicts as provided by the Rick & Morty API.
+    """Fetch all characters from the upstream API with pagination and retries.
+
+    Walks through pages until `info.next` is absent. Uses `_request_with_retry`
+    to be resilient to throttling and transient failures.
+
+    Returns:
+        A list of raw character dicts as provided by the Rick & Morty API.
     """
     results: List[Dict[str, Any]] = []
     page = 1
@@ -74,12 +93,18 @@ async def fetch_all_characters() -> List[Dict[str, Any]]:
 
 
 def filter_character_results(characters: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """
-    Apply assignment filters:
-      - species == Human
-      - status == Alive
-      - origin starts with 'Earth'
-    Returns a slimmed dict with only relevant fields.
+    """Apply assignment filters and return a slimmed payload.
+
+    Filters:
+      * species == "Human"
+      * status == "Alive"
+      * origin starts with "Earth"
+
+    Args:
+        characters: Raw character dicts from the upstream API.
+
+    Returns:
+        A list of filtered character dicts with just relevant fields.
     """
     out: List[Dict[str, Any]] = []
     for ch in characters:
@@ -102,9 +127,13 @@ def filter_character_results(characters: List[Dict[str, Any]]) -> List[Dict[str,
 
 
 async def get_characters() -> List[Dict[str, Any]]:
-    """
-    Service-facing function: returns filtered characters,
-    with caching for CACHE_TTL seconds.
+    """Return filtered characters using a simple in-process cache.
+
+    The first call fetches from upstream and caches the filtered results for `CACHE_TTL`
+    seconds. Subsequent calls within the TTL return the cached value.
+
+    Returns:
+        Filtered character dicts (list).
     """
     now = time.time()
     if _cache["data"] is not None and now - _cache["ts"] < CACHE_TTL:
@@ -119,14 +148,25 @@ async def get_characters() -> List[Dict[str, Any]]:
 
 
 def cache_info() -> Tuple[bool, float | None]:
-    """Return whether cache is populated and its age in seconds."""
+    """Report cache state and age.
+
+    Returns:
+        Tuple of:
+          * populated (bool): Whether the cache currently has data.
+          * age_sec (float | None): Age of the cache in seconds, or None if empty.
+    """
     if _cache["ts"] == 0:
         return False, None
     return (_cache["data"] is not None, round(time.time() - _cache["ts"], 2))
 
 
 async def quick_upstream_probe() -> bool:
-    """Lightweight probe to upstream root API endpoint."""
+    """Perform a lightweight upstream health probe.
+
+    Returns:
+        True if the upstream root API endpoint returns HTTP 200,
+        otherwise False (including exceptions).
+    """
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             r = await client.get("https://rickandmortyapi.com/api")

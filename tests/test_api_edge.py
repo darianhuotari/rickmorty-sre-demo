@@ -1,14 +1,17 @@
+"""Edge and exception-path tests for the upstream HTTP client.
+
+Exercises:
+* Retry exhaustion -> HTTPException(503)
+* Success branch of quick_upstream_probe() when status_code == 200
+"""
+
 import pytest
 from app import api
 
 
 @pytest.mark.asyncio
 async def test_fetch_all_characters_exhausts_retries_and_raises(monkeypatch):
-    """
-    Force _request_with_retry to exhaust retries (continuous 500s)
-    and verify we surface HTTPException(503).
-    Covers the raise path (~line 47).
-    """
+    """Exhaust retries on continuous 500s and surface HTTPException(503)."""
 
     class FakeResp:
         status_code = 500
@@ -40,11 +43,7 @@ async def test_fetch_all_characters_exhausts_retries_and_raises(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_quick_upstream_probe_true_branch(monkeypatch):
-    """
-    Exercise the success path (status_code == 200) in quick_upstream_probe,
-    which wasn’t covered because route tests mocked the function.
-    Covers the True return (~line 125).
-    """
+    """Return True when upstream GET returns HTTP 200."""
 
     class FakeResp:
         status_code = 200

@@ -1,13 +1,20 @@
+"""Happy-path HTTP behavior for the upstream API client.
+
+Exercises:
+* 429/5xx retry/backoff logic
+* Pagination across multiple pages
+* Transient transport error -> retry then success
+* quick_upstream_probe false path on exception
+* cache_info() empty state
+"""
+
 import pytest
 from app import api
 
 
 @pytest.mark.asyncio
 async def test_fetch_all_characters_retries_then_succeeds(monkeypatch):
-    """
-    Covers api.py lines ~23–47 (429/5xx retry & backoff) and 62–73 (pagination).
-    We fake two pages. Page 1: first a 500, then a 429, then OK. Page 2: OK with no 'next'.
-    """
+    """Retry on 500/429 then fetch page1+page2; return combined results."""
 
     class FakeResp:
         def __init__(self, status_code, payload=None, headers=None):
@@ -38,11 +45,7 @@ async def test_fetch_all_characters_retries_then_succeeds(monkeypatch):
         },
     )
 
-    # Call sequence for client.get:
-    # 1) 500 -> triggers retry
-    # 2) 429 with Retry-After: "0" -> triggers retry without delay
-    # 3) 200 (page1)
-    # 4) 200 (page2)
+    # Call sequence: 500 -> 429 -> 200 (p1) -> 200 (p2)
     calls = [
         FakeResp(500),
         FakeResp(429, headers={"Retry-After": "0"}),
@@ -63,22 +66,16 @@ async def test_fetch_all_characters_retries_then_succeeds(monkeypatch):
             idx["i"] += 1
             return calls[i]
 
-    # Patch AsyncClient to our fake
     monkeypatch.setattr(api.httpx, "AsyncClient", lambda *a, **k: FakeClient())
-
-    # Lower backoff/jitter for speed (optional)
     monkeypatch.setattr(api, "MAX_RETRIES", 5, raising=False)
 
     results = await api.fetch_all_characters()
-    # Should contain both pages after surviving retries
     assert [r["id"] for r in results] == [1, 2]
 
 
 @pytest.mark.asyncio
 async def test_fetch_all_characters_transport_error_then_success(monkeypatch):
-    """
-    Covers transient network exceptions path inside _request_with_retry.
-    """
+    """Retry on transport error; then succeed with empty page."""
 
     class FakeTransportError(Exception):
         pass
@@ -96,7 +93,7 @@ async def test_fetch_all_characters_transport_error_then_success(monkeypatch):
         def raise_for_status(self):
             return None
 
-    # First call raises a transport error; second returns OK.
+    # First call raises; second returns OK.
     calls = [FakeTransportError(), FakeResp({"results": [], "info": {"next": None}})]
     idx = {"i": 0}
 
@@ -123,6 +120,8 @@ async def test_fetch_all_characters_transport_error_then_success(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_quick_upstream_probe_returns_false_on_exception(monkeypatch):
+    """Return False when GET raises a timeout/transport exception."""
+
     class FakeClient:
         async def __aenter__(self):
             return self
@@ -139,6 +138,7 @@ async def test_quick_upstream_probe_returns_false_on_exception(monkeypatch):
 
 
 def test_cache_info_empty():
+    """Report populated=False, age=None when cache is empty."""
     api._cache["ts"] = 0
     api._cache["data"] = None
     populated, age = api.cache_info()
