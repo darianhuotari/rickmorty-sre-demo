@@ -8,10 +8,13 @@ and the public REST endpoints:
 - GET /characters  -> paginated/sorted characters from the DB
 """
 
+import math
+import os
+import asyncio
+
+from contextlib import asynccontextmanager, suppress
 from fastapi import FastAPI, HTTPException, Query, Depends
 from fastapi.responses import RedirectResponse
-import math
-from contextlib import asynccontextmanager
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import api, crud, ingest
@@ -22,17 +25,46 @@ app = FastAPI(title="Rick & Morty Characters", version="0.4.0")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan: initialize schema and perform initial ingest.
-
-    Creates tables and performs a one-time ingest if the database is empty.
-    Runs before the application starts accepting requests.
-    """
+    """Application lifespan: initialize schema, seed (once), and run refresh daemon."""
     await init_db()
-    # (We open a short-lived session to seed)
+    # Seed once if empty
     async for session in get_session():
         await ingest.initial_sync_if_empty(session)
         break
-    yield
+
+    # Optional background refresher (good for dev; prod can use a CronJob)
+    enabled = os.getenv("REFRESH_WORKER_ENABLED", "1") not in ("0", "false", "False")
+    stop_event = asyncio.Event()
+    task = None
+
+    if enabled:
+        interval = float(os.getenv("REFRESH_INTERVAL", "300"))
+
+        async def _refresher():
+            while not stop_event.is_set():
+                # one short-lived session per iteration
+                async for s in get_session():
+                    try:
+                        await ingest.refresh_if_stale(s)
+                    except Exception:
+                        # keep going; we don't want the task to die
+                        pass
+                    break
+                try:
+                    await asyncio.wait_for(stop_event.wait(), timeout=interval)
+                except asyncio.TimeoutError:
+                    continue
+
+        task = asyncio.create_task(_refresher())
+
+    try:
+        yield
+    finally:
+        stop_event.set()
+        if task is not None:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
 
 
 app.router.lifespan_context = lifespan
@@ -48,7 +80,7 @@ async def root():
 async def healthcheck(session: AsyncSession = Depends(get_session)):
     """Deep health check for upstream API and database.
 
-    Verifies upstream reachability and DB connectivity. Also returns the total
+    Verifies upstream reachability, DB connectivity / refresh recency. Also returns the total
     character count as a simple business metric.
 
     Args:
@@ -71,6 +103,7 @@ async def healthcheck(session: AsyncSession = Depends(get_session)):
         "upstream_ok": upstream_ok,
         "db_ok": db_ok,
         "character_count": total,
+        "last_refresh_age": ingest.last_refresh_age(),
     }
 
 
