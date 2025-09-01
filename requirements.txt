@@ -4,3 +4,5 @@ httpx
 sqlalchemy>=2.0
 asyncpg
 aiosqlite     # for local/dev tests if DATABASE_URL not set
+slowapi>=0.1.9
+limits>=3.10
