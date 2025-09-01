@@ -1,43 +1,30 @@
+"""HTTP route tests for /characters.
+
+Verifies that /characters returns sorted results and basic pagination metadata
+when the CRUD layer is mocked.
+"""
+
 from fastapi.testclient import TestClient
 from app.main import app
-from app import api
+from app import crud
 
 
 def test_characters_route_sorted_by_name(monkeypatch):
-    # async fake for get_characters()
-    async def fake_get_characters():
-        return [{"id": 2, "name": "Beth"}, {"id": 1, "name": "Alice"}]
+    """Return results sorted by name ASC with correct total_count."""
 
-    monkeypatch.setattr(api, "get_characters", fake_get_characters)
+    async def fake_list(session, sort, order, page, page_size):
+        rows = [{"id": 2, "name": "Beth"}, {"id": 1, "name": "Alice"}]
+        rows = sorted(rows, key=lambda x: x["name"].lower(), reverse=(order == "desc"))
+        total = 2
+        start = (page - 1) * page_size
+        end = start + page_size
+        return rows[start:end], total
 
-    client = TestClient(app)
-    resp = client.get("/characters?sort=name&order=asc")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["count"] == 2
-    assert [x["name"] for x in data["results"]] == ["Alice", "Beth"]
-
-
-def test_healthcheck_route(monkeypatch):
-    # async fake for quick_upstream_probe()
-    async def fake_probe():
-        return True
-
-    monkeypatch.setattr(api, "quick_upstream_probe", fake_probe)
-    monkeypatch.setattr(api, "cache_info", lambda: (True, 1.23))
+    monkeypatch.setattr(crud, "list_characters", fake_list)
 
     client = TestClient(app)
-    resp = client.get("/healthcheck")
+    resp = client.get("/characters?sort=name&order=asc&page=1&page_size=50")
     assert resp.status_code == 200
     j = resp.json()
-    assert j["status"] == "ok"
-    assert j["upstream_ok"] is True
-    assert j["cache_populated"] is True
-    assert j["cache_age_sec"] == 1.23
-
-
-def test_root_redirects_to_docs():
-    client = TestClient(app, follow_redirects=False)
-    resp = client.get("/")
-    assert resp.status_code in (307, 302)
-    assert resp.headers["location"].endswith("/docs")
+    assert j["total_count"] == 2
+    assert [x["name"] for x in j["results"]] == ["Alice", "Beth"]

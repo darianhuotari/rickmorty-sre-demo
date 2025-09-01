@@ -1,3 +1,6 @@
 fastapi
 uvicorn[standard]
 httpx
+sqlalchemy>=2.0
+asyncpg
+aiosqlite     # for local/dev tests if DATABASE_URL not set

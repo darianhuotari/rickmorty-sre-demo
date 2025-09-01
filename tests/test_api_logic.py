@@ -1,3 +1,11 @@
+"""Pure logic tests for upstream data processing.
+
+Covers:
+* Filtering rules (Human, Alive, origin startswith Earth)
+* Cache behavior for get_characters (hit/miss/expiry)
+* quick_upstream_probe happy path via a local httpx stub
+"""
+
 import asyncio
 from typing import List, Dict, Any
 
@@ -6,7 +14,7 @@ from app import api
 
 
 def _sample_raw() -> List[Dict[str, Any]]:
-    # Mix of characters; only 1 & 4 should pass the filter.
+    """Mixed sample of upstream characters; only IDs 1 and 4 should pass filters."""
     return [
         {  # passes (Human, Alive, Earth*)
             "id": 1,
@@ -57,6 +65,7 @@ def _sample_raw() -> List[Dict[str, Any]]:
 
 
 def test_filter_character_results_filters_and_shapes():
+    """Filter to Human+Alive+Earth and return a slimmed dict shape."""
     raw = _sample_raw()
     filtered = api.filter_character_results(raw)
 
@@ -81,6 +90,7 @@ def test_filter_character_results_filters_and_shapes():
 
 @pytest.mark.asyncio
 async def test_get_characters_uses_cache(monkeypatch):
+    """Populate cache on first call; second call returns cached value."""
     # Make cache effectively long for this test
     monkeypatch.setattr(api, "CACHE_TTL", 60, raising=False)
 
@@ -108,6 +118,7 @@ async def test_get_characters_uses_cache(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_characters_cache_expires(monkeypatch):
+    """Cache expires after TTL; a subsequent call refetches from upstream."""
     # Very short TTL so it expires
     monkeypatch.setattr(api, "CACHE_TTL", 0.1, raising=False)
 
@@ -135,6 +146,8 @@ async def test_get_characters_cache_expires(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_quick_upstream_probe_mocked(monkeypatch):
+    """Return True when the local httpx stub returns HTTP 200."""
+
     # Mock httpx.AsyncClient so we don't do real I/O
     class FakeResp:
         status_code = 200
