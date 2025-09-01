@@ -1,0 +1,35 @@
+{{- /* Rendered after install/upgrade. Pure text, not YAML. */ -}}
+Thanks for installing {{ .Chart.Name }} (release: {{ .Release.Name }}) in namespace {{ .Release.Namespace }}.
+
+{{- if .Values.ingress.enabled }}
+
+Access via Ingress:
+  Host: {{ (index .Values.ingress.hosts 0).host | default "rickmorty.local" }}
+  URL : http://{{ (index .Values.ingress.hosts 0).host | default "rickmorty.local" }}{{ (index (index .Values.ingress.hosts 0).paths 0).path | default "/" }}
+
+If you’re using kind/minikube and port-forwarding the ingress controller:
+  curl -H "Host: {{ (index .Values.ingress.hosts 0).host | default "rickmorty.local" }}" http://127.0.0.1:8080/healthcheck
+
+{{- else }}
+
+No Ingress enabled. Port-forward the service:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "rickmorty.fullname" . }} 8000:8000
+  curl http://127.0.0.1:8000/healthcheck
+
+{{- end }}
+
+API examples:
+  GET /healthcheck
+  GET /characters?page=1&page_size=5&sort=name&order=asc
+
+{{- if .Values.postgresql.enabled }}
+PostgreSQL (Bitnami subchart enabled):
+  host: {{ include "rickmorty.fullname" . }}-postgresql
+  user: {{ .Values.postgresql.auth.username }}
+  db  : {{ .Values.postgresql.auth.database }}
+{{- end }}
+
+{{- if .Values.redis.enabled }}
+Redis (Bitnami subchart enabled):
+  host: {{ include "rickmorty.fullname" . }}-redis-master
+{{- end }}

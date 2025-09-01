@@ -10,6 +10,17 @@ if ROOT not in sys.path:
 import pytest_asyncio
 from contextlib import asynccontextmanager
 
+
+# Force an in-memory SQLite for tests so we never touch Postgres pooling.
+os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+# Ensure no leftover pool envs confuse SQLAlchemy in tests
+os.environ.pop("DB_POOL_SIZE", None)
+os.environ.pop("DB_MAX_OVERFLOW", None)
+
+from app import db  # noqa: E402
+
+# Make sure the already-imported module uses our test URL
+db.configure_engine(os.environ["DATABASE_URL"])
 from app import db
 import app.main as app_main  # patch names bound inside main.py
 

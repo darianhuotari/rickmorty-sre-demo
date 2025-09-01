@@ -1,0 +1,121 @@
+image:
+  repository: rickmorty-sre-demo    # change to your registry/repo
+  tag: latest
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+service:
+  type: ClusterIP
+  port: 8000
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations: {}
+  hosts:
+    - host: rickmorty.local    # change for your domain
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []   # e.g., - secretName: rickmorty-tls; hosts: [rickmorty.example.com]
+
+resources:
+  limits:
+    #cpu: "500m" No CPU limit; not multitenant
+    memory: "512Mi"
+  requests:
+    cpu: "250m"
+    memory: "256Mi"
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  # Targets are percentages of requested resources
+  cpuUtilization: 70
+  memoryUtilization: 80
+
+# App configuration
+env:
+  RATE_LIMIT: "100/second"
+  CACHE_TTL: "300"
+  MAX_RETRIES: "5"
+  REQUEST_TIMEOUT: "10"
+  REFRESH_WORKER_ENABLED: "1"
+  REFRESH_INTERVAL: "300"
+  LOG_FILE_PATH: "/var/log/app/app.log"  # main container writes to this; sidecar tails it
+
+# Database configuration
+database:
+  # If you manage secrets yourself (Vault/ExternalSecrets), set existingSecret and key
+  existingSecret: ""     # e.g., "rmdb-secret"
+  key: "DATABASE_URL"    # the key inside the Secret holding the URL
+  # Or have the chart create a Secret from values below (not recommended for real prod)
+  createSecret: false
+  url: ""                # e.g., "postgresql+asyncpg://rick:rickpass@postgres:5432/rmdb"
+
+# Fluent Bit log sidecar (tail a shared emptyDir and ship to stdout)
+fluentbit:
+  enabled: true
+  image: "cr.fluentbit.io/fluent/fluent-bit:2.1.10"
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  # Minimal config: tail the shared file and print to stdout (k8s will collect)
+  inputPath: "/var/log/app/app.log"
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+postgresql:
+  enabled: false
+  auth:
+    username: rick
+    password: rickpass
+    database: rmdb
+  primary:
+    persistence:
+      enabled: false  # ephemeral for demo; set true with a StorageClass in prod
+
+redis:
+  enabled: false
+  architecture: standalone
+  auth:
+    enabled: true
+    password: redpass
+  master:
+    persistence:
+      enabled: false
+
+# If you manage secrets yourself, keep these empty and use existingSecret like before
+database:
+  existingSecret: ""
+  key: DATABASE_URL
+  createSecret: false
+  url: ""
+
+rateLimit:
+  existingSecret: ""
+  key: REDIS_URL
+  createSecret: false
+  url: ""  # e.g., redis://:redpass@redis-master:6379/0

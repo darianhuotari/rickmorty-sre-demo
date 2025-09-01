@@ -1,6 +1,7 @@
 """Background refresh worker tests and healthcheck 'last_refresh_age'."""
 
 import time
+import pytest
 from fastapi.testclient import TestClient
 import app.main as app_main
 from app import ingest
@@ -71,3 +72,20 @@ def test_background_refresher_exception_is_swallowed(monkeypatch):
 
     # If we got here without exploding, the exception was swallowed by the worker
     assert calls["n"] >= 1
+
+
+def test_startup_fails_when_wait_for_db_raises(monkeypatch):
+    """If wait_for_db fails, startup should fail and propagate the error (cover log+raise)."""
+
+    async def boom():
+        raise RuntimeError("db down hard")
+
+    # Ensure we use the real lifespan (some suites override it in conftest)
+    monkeypatch.setattr(
+        app_main.app.router, "lifespan_context", app_main.lifespan, raising=False
+    )
+    monkeypatch.setattr(app_main, "wait_for_db", boom)
+
+    with pytest.raises(RuntimeError):
+        with TestClient(app_main.app):
+            pass  # should never reach here
