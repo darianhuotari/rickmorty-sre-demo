@@ -2,9 +2,9 @@
 
 
 Todo:
-Move rate-limit logic to nginx
-Remove redis 
-Remove slowAPI / custom rate-limit tests
+Simplify helm chart layout; 
+Build and write docker iamge
+bring cluster online in CI via make for integration testing
 
 
 
