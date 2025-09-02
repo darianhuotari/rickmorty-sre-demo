@@ -19,12 +19,6 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import RedirectResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# Rate limiting (leave as-is for now; you said you’ll remove it in a later PR)
-from slowapi import Limiter
-from slowapi.middleware import SlowAPIMiddleware
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
-
 from . import api, crud, ingest
 from .db import get_session, init_db, wait_for_db
 from .schemas import CharactersPage, HealthcheckOut, ProblemDetail
@@ -34,18 +28,11 @@ configure_logging()
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------
-# App + rate limiter
+# App
 # ---------------------------------------------------------------------
 
-DEFAULT_RATE = os.getenv("RATE_LIMIT", "100/second")
-
-limiter = Limiter(
-    key_func=get_remote_address,
-    default_limits=[DEFAULT_RATE],
-)
-
 app = FastAPI(title="Rick & Morty Characters", version="0.6.0")
-app.state.limiter = limiter
+
 
 _STATUS_TITLES = {
     400: "Bad Request",
@@ -90,15 +77,6 @@ async def validation_exception_handler(_req: Request, exc: RequestValidationErro
     msg = exc.errors()[0]["msg"] if exc.errors() else "Validation error"
     return _problem(status=422, title=_STATUS_TITLES[422], detail=msg)
 
-
-@app.exception_handler(RateLimitExceeded)
-async def ratelimit_exception_handler(_req: Request, exc: RateLimitExceeded):
-    return _problem(
-        status=429, title=_STATUS_TITLES[429], detail=f"Rate limit exceeded: {exc}"
-    )
-
-
-app.add_middleware(SlowAPIMiddleware)
 
 # ---------------------------------------------------------------------
 # Lifespan + background refresh
@@ -180,7 +158,6 @@ async def root(_request: Request):
     response_model=HealthcheckOut,
     responses={429: {"content": _problem_resp, "model": ProblemDetail}},
 )
-@limiter.limit(DEFAULT_RATE)
 async def healthcheck(request: Request, session: AsyncSession = Depends(get_session)):
     """Deep health check for upstream API and database."""
     upstream_ok = await api.quick_upstream_probe()
@@ -210,7 +187,6 @@ async def healthcheck(request: Request, session: AsyncSession = Depends(get_sess
         429: {"content": _problem_resp, "model": ProblemDetail},
     },
 )
-@limiter.limit(DEFAULT_RATE)
 async def characters(
     request: Request,
     sort: str = Query("id", pattern=r"^(id|name)$"),

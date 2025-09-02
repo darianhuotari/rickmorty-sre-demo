@@ -28,8 +28,3 @@ PostgreSQL (Bitnami subchart enabled):
   user: {{ .Values.postgresql.auth.username }}
   db  : {{ .Values.postgresql.auth.database }}
 {{- end }}
-
-{{- if .Values.redis.enabled }}
-Redis (Bitnami subchart enabled):
-  host: {{ include "rickmorty.fullname" . }}-redis-master
-{{- end }}
