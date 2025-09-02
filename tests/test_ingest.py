@@ -9,7 +9,6 @@ import logging
 import pytest
 
 from contextlib import asynccontextmanager
-from sqlalchemy import text
 
 from app import db, ingest, crud, api
 
@@ -271,6 +270,7 @@ async def test_refresh_if_stale_success_path(monkeypatch):
     # age should be small (recently set); just ensure it's numeric
     assert isinstance(ingest.last_refresh_age(), float)
 
+
 @pytest.mark.asyncio
 async def test_pg_advisory_lock_logs_release_when_supported(caplog, monkeypatch):
     """
@@ -299,7 +299,10 @@ async def test_pg_advisory_lock_logs_release_when_supported(caplog, monkeypatch)
             assert have is True
 
     # Should see the 'released' message (covers line ~53)
-    assert any("advisory_lock key=" in rec.message and "released" in rec.message for rec in caplog.records)
+    assert any(
+        "advisory_lock key=" in rec.message and "released" in rec.message
+        for rec in caplog.records
+    )
 
 
 @pytest.mark.asyncio
@@ -314,17 +317,24 @@ async def test_initial_sync_logs_skip_when_already_populated(caplog, monkeypatch
     @asynccontextmanager
     async def fake_lock(_session, _key):
         yield True
+
     monkeypatch.setattr(ingest, "_pg_advisory_lock", fake_lock)
 
     async with db.SessionLocal() as s:
         # Seed one row
         await crud.upsert_characters(
             s,
-            [{
-                "id": 1, "name": "Beth Smith", "status": "Alive",
-                "species": "Human", "origin": "Earth (C-137)",
-                "image": None, "url": None
-            }],
+            [
+                {
+                    "id": 1,
+                    "name": "Beth Smith",
+                    "status": "Alive",
+                    "species": "Human",
+                    "origin": "Earth (C-137)",
+                    "image": None,
+                    "url": None,
+                }
+            ],
         )
 
         # Now call initial_sync in the SAME session/connection

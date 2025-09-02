@@ -43,7 +43,9 @@ async def _pg_advisory_lock(session: AsyncSession, key: int):
     except Exception:
         # Non-PG or no function — proceed unlocked (safe in single-writer tests/dev).
         have = True
-        log.debug("advisory_lock key=%s not supported on this engine; proceeding", hex(key))
+        log.debug(
+            "advisory_lock key=%s not supported on this engine; proceeding", hex(key)
+        )
     try:
         yield have
     finally:
