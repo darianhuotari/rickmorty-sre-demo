@@ -46,7 +46,7 @@ format:
 	$(PYTHON) -m black app tests
 
 test:
-	$(PYTHON) -m pytest -v -k "not e2e" --cov=app --cov-report=term-missing --cov-fail-under=80 -q
+	$(PYTHON) -m pytest tests --ignore=tests/test_e2e.py --cov=app --cov-report=term-missing --cov-fail-under=80 -v
 
 coverage:
 	$(PYTHON) -m pytest --cov=app --cov-report=html
@@ -120,10 +120,10 @@ E2E_PYTHON := $(subst /,\,$(PYTHON))
 ifeq ($(OS),Windows_NT)
 # Windows: Use PowerShell jobs to manage port-forward
 e2e-start-portforward:
-	@powershell -Command "$$job = Start-Job -ScriptBlock { kubectl -n ingress-nginx port-forward svc/ingress-nginx-controller 8080:80 }; Set-Content -Path '.port-forward-job' -Value $$job.Id; Start-Sleep -Seconds 3"
+	@powershell -Command "Write-Host 'Starting port-forward...'; $$job = Start-Process kubectl -ArgumentList '-n', 'ingress-nginx', 'port-forward', 'svc/ingress-nginx-controller', '8080:80' -NoNewWindow -PassThru; Set-Content -Path '.port-forward-job' -Value $$job.Id; Write-Host 'Waiting for port to be ready...'; $$maxAttempts = 30; $$attempt = 0; while ($$attempt -lt $$maxAttempts) { if ((Test-NetConnection -ComputerName 127.0.0.1 -Port 8080 -WarningAction SilentlyContinue).TcpTestSucceeded) { Write-Host 'Port-forward is ready!'; exit 0 }; Start-Sleep -Seconds 1; $$attempt++; Write-Host 'Still waiting... (attempt $$attempt)' }; Write-Host 'Port-forward failed to start' -ForegroundColor Red; exit 1"
 
 e2e-stop-portforward:
-	@powershell -Command "if (Test-Path .port-forward-job) { $$id = Get-Content .port-forward-job; if (Get-Job -Id $$id -ErrorAction SilentlyContinue) { Stop-Job -Id $$id; Remove-Job -Id $$id }; Remove-Item .port-forward-job }"
+	@powershell -Command "Write-Host 'Cleaning up port-forward...'; if (Test-Path .port-forward-job) { $$id = Get-Content .port-forward-job; Write-Host ('Found process id: ' + $$id); $$process = Get-Process -Id $$id -ErrorAction SilentlyContinue; if ($$process) { Write-Host 'Stopping process...'; Stop-Process -Id $$id -Force; Write-Host 'Process stopped.' }; Remove-Item .port-forward-job; Write-Host 'Temporary file removed.' } else { Write-Host 'No port-forward file found.' }"
 else
 # Unix: Use background process with pid file
 e2e-start-portforward:
