@@ -16,7 +16,9 @@ PIP = $(VENV)/Scripts/pip.exe
 
 # Fallbacks for POSIX systems
 ifeq ($(OS),Windows_NT)
-    ACTIVATE = $(VENV)/Scripts/activate
+    PYTHON = "$(VENV)\Scripts\python.exe"
+    PIP = "$(VENV)\Scripts\pip.exe"
+    ACTIVATE = "$(VENV)\Scripts\activate"
 else
     PYTHON = $(VENV)/bin/python
     PIP = $(VENV)/bin/pip
@@ -136,7 +138,7 @@ endif
 
 test-e2e: venv e2e-start-portforward
 	$(PIP) install -r requirements-e2e.txt
-	"$(E2E_PYTHON)" -m pytest tests/test_e2e.py -v -m e2e || ($(MAKE) e2e-stop-portforward && exit 1)
+	$(PYTHON) -m pytest "tests/test_e2e.py" -v -m e2e || ($(MAKE) e2e-stop-portforward && exit 1)
 	$(MAKE) e2e-stop-portforward
 
 # ---- timeouts (define once, no trailing spaces) ----
@@ -170,6 +172,9 @@ kind-up:
 
 	@$(info Installing ingress-nginx (controller + admission webhook)...)
 	$(KUBECTL) apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+
+	@$(info Updating Helm dependencies...)
+	cd $(RICKMORTY_CHART) && $(HELM) dependency update
 
 	@$(info Waiting for core components...)
 	$(MAKE) _wait-core

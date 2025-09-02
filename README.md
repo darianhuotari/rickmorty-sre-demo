@@ -2,9 +2,14 @@
 
 
 Todo:
-Write make commands to standup / teardown cluster
-Build and write docker iamge
 bring cluster online in CI via make for integration testing
+
+Move helm dependency ( cd deploy/helm/rickmorty
+  helm dependency update
+  cd ../../..) to makefile?
+
+Build and write docker iamge
+
 
 Prod stuff:
 Secret management?

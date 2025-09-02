@@ -68,17 +68,10 @@ jobs:
           make install
           pip install -r requirements-e2e.txt
 
-      - name: Update Helm dependencies
+      - name: Setup Kind cluster and run e2e tests
         run: |
-          cd deploy/helm/rickmorty
-          helm dependency update
-          cd ../../..
-
-      - name: Setup Kind cluster
-        run: make kind-up
-
-      - name: Run e2e tests
-        run: make test-e2e
+          make kind-up
+          make test-e2e
 
       - name: Cleanup Kind cluster
         if: always()
