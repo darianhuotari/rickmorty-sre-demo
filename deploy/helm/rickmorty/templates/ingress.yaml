@@ -9,6 +9,14 @@ metadata:
     {{- with .Values.ingress.annotations }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
+    {{- with .Values.ingress.rateLimit }}
+    nginx.ingress.kubernetes.io/limit-rps: "{{ .rps }}"
+    nginx.ingress.kubernetes.io/limit-burst: "{{ .burst }}"
+    nginx.ingress.kubernetes.io/limit-no-delay: "{{ .noDelay }}"
+    nginx.ingress.kubernetes.io/limit-connections: "{{ .connections }}"
+    nginx.ingress.kubernetes.io/limit-req-status-code: "{{ .statusCode }}"
+    nginx.ingress.kubernetes.io/limit-req-zone-variable: "{{ .key }}"
+    {{- end }}
 spec:
   {{- if .Values.ingress.className }}
   ingressClassName: {{ .Values.ingress.className }}

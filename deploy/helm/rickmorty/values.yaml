@@ -3,7 +3,7 @@ image:
   tag: latest
   pullPolicy: IfNotPresent
 
-replicaCount: 2
+# replicaCount: 2 # don't need a replica count since we have hpa
 
 service:
   type: ClusterIP
@@ -19,6 +19,15 @@ ingress:
         - path: /
           pathType: Prefix
   tls: []   # e.g., - secretName: rickmorty-tls; hosts: [rickmorty.example.com]
+
+  # NGINX rate limiting (per-client IP by default)
+  rateLimit:
+    rps: 50                  # requests per second per client
+    burst: 100               # token bucket burst
+    noDelay: false           # true => serve bursts immediately; false => gently pace
+    connections: 20          # concurrent connections per client
+    #statusCode: 429          # status code on limit (ingress-nginx supports this)
+    key: "$binary_remote_addr"  # rate-limit key (e.g. $binary_remote_addr, $http_x_api_key)
 
 resources:
   limits:
@@ -42,13 +51,22 @@ hpa:
 
 # App configuration
 env:
-  RATE_LIMIT: "100/second"
   CACHE_TTL: "300"
   MAX_RETRIES: "5"
   REQUEST_TIMEOUT: "10"
   REFRESH_WORKER_ENABLED: "1"
   REFRESH_INTERVAL: "300"
   LOG_FILE_PATH: "/var/log/app/app.log"  # main container writes to this; sidecar tails it
+
+    # --- DB wait / startup backoff ---
+  DB_WAIT_MAX_ATTEMPTS: 10        # how many ping attempts before giving up
+  DB_WAIT_BACKOFF_START: 1.0      # seconds (first wait)
+  DB_WAIT_BACKOFF_MAX: 10.0       # seconds (cap)
+
+  # --- SQLAlchemy pool tuning (only used for Postgres URLs) ---
+  DB_POOL_SIZE: 5                 # base pool size
+  DB_MAX_OVERFLOW: 10             # how many extra conns beyond pool_size
+  DB_POOL_RECYCLE: 1800           # seconds; proactively recycle idle conns
 
 # Database configuration
 database:
@@ -88,7 +106,7 @@ containerSecurityContext:
     drop: ["ALL"]
 
 postgresql:
-  enabled: false
+  enabled: true # why is this false
   auth:
     username: rick
     password: rickpass
@@ -97,25 +115,9 @@ postgresql:
     persistence:
       enabled: false  # ephemeral for demo; set true with a StorageClass in prod
 
-redis:
-  enabled: false
-  architecture: standalone
-  auth:
-    enabled: true
-    password: redpass
-  master:
-    persistence:
-      enabled: false
-
 # If you manage secrets yourself, keep these empty and use existingSecret like before
-database:
-  existingSecret: ""
-  key: DATABASE_URL
-  createSecret: false
-  url: ""
-
-rateLimit:
-  existingSecret: ""
-  key: REDIS_URL
-  createSecret: false
-  url: ""  # e.g., redis://:redpass@redis-master:6379/0
+#database:
+#  existingSecret: ""
+# key: DATABASE_URL
+#  createSecret: false
+#  url: ""

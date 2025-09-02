@@ -9,7 +9,3 @@ dependencies:
     version: 15.5.11
     repository: https://charts.bitnami.com/bitnami
     condition: postgresql.enabled
-  - name: redis
-    version: 19.6.2
-    repository: https://charts.bitnami.com/bitnami
-    condition: redis.enabled

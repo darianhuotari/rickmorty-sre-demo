@@ -6,12 +6,15 @@ and periodically refresh the local database.
 
 import os
 import time
+import logging
 from contextlib import asynccontextmanager, suppress
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import api, crud
+
+log = logging.getLogger(__name__)
 
 REFRESH_TTL = int(os.getenv("REFRESH_TTL", "600"))  # seconds
 _last_refresh_ts: float | None = None
@@ -36,15 +39,20 @@ async def _pg_advisory_lock(session: AsyncSession, key: int):
         res = await session.execute(text("SELECT pg_try_advisory_lock(:k)"), {"k": key})
         scalar = res.scalar()
         have = bool(scalar) if scalar is not None else True
+        log.debug("advisory_lock key=%s acquired=%s", hex(key), have)
     except Exception:
         # Non-PG or no function — proceed unlocked (safe in single-writer tests/dev).
         have = True
+        log.debug(
+            "advisory_lock key=%s not supported on this engine; proceeding", hex(key)
+        )
     try:
         yield have
     finally:
         if have:
             with suppress(Exception):
                 await session.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": key})
+                log.debug("advisory_lock key=%s released", hex(key))
 
 
 async def initial_sync_if_empty(session: AsyncSession) -> int:
@@ -58,19 +66,31 @@ async def initial_sync_if_empty(session: AsyncSession) -> int:
     Returns:
         Number of items processed (0 if the table was already populated).
     """
-    # Only one pod seeds at a time (no thundering herd on cold start).
-    SEED_LOCK_KEY = 0xC0FFEE
+    SEED_LOCK_KEY = 0xC0FFEE  # Only one pod seeds at a time
     async with _pg_advisory_lock(session, SEED_LOCK_KEY) as have_lock:
         if not have_lock:
+            log.debug("initial_sync skipped: lock held by another instance")
             return 0
-        if await crud.count_characters(session) == 0:
-            raw = await api.fetch_all_characters()
-            filtered = api.filter_character_results(raw)
-            n = await crud.upsert_characters(session, filtered)
-            global _last_refresh_ts
-            _last_refresh_ts = time.time()
-            return n
-    return 0
+
+        count = await crud.count_characters(session)
+        if count > 0:
+            log.debug("initial_sync skipped: table already populated (rows=%d)", count)
+            return 0
+
+        log.info("initial_sync starting: empty table detected")
+        raw = await api.fetch_all_characters()
+        filtered = api.filter_character_results(raw)
+        n = await crud.upsert_characters(session, filtered)
+
+        global _last_refresh_ts
+        _last_refresh_ts = time.time()
+        log.info(
+            "initial_sync complete: fetched=%d filtered=%d upserted=%d",
+            len(raw),
+            len(filtered),
+            n,
+        )
+        return n
 
 
 async def refresh_if_stale(session: AsyncSession) -> int:
@@ -86,15 +106,29 @@ async def refresh_if_stale(session: AsyncSession) -> int:
     """
     global _last_refresh_ts
     now = time.time()
-    if _last_refresh_ts is None or (now - _last_refresh_ts) > REFRESH_TTL:
-        # Only one pod refreshes at a time
-        REFRESH_LOCK_KEY = 0xBEEFED
-        async with _pg_advisory_lock(session, REFRESH_LOCK_KEY) as have_lock:
-            if not have_lock:
-                return 0
-            raw = await api.fetch_all_characters()
-            filtered = api.filter_character_results(raw)
-            n = await crud.upsert_characters(session, filtered)
-            _last_refresh_ts = time.time()
-            return n
-    return 0
+    age = None if _last_refresh_ts is None else round(now - _last_refresh_ts, 2)
+
+    if _last_refresh_ts is not None and (now - _last_refresh_ts) <= REFRESH_TTL:
+        log.debug("refresh skipped: still fresh (age=%ss ttl=%ss)", age, REFRESH_TTL)
+        return 0
+
+    REFRESH_LOCK_KEY = 0xBEEFED  # Only one pod refreshes at a time
+    async with _pg_advisory_lock(session, REFRESH_LOCK_KEY) as have_lock:
+        if not have_lock:
+            log.debug("refresh skipped: lock held by another instance")
+            return 0
+
+        log.info("refresh starting: age=%s ttl=%s", age, REFRESH_TTL)
+        raw = await api.fetch_all_characters()
+        filtered = api.filter_character_results(raw)
+        n = await crud.upsert_characters(session, filtered)
+        _last_refresh_ts = time.time()
+
+        log.info(
+            "refresh complete: fetched=%d filtered=%d upserted=%d age_before=%s",
+            len(raw),
+            len(filtered),
+            n,
+            age,
+        )
+        return n

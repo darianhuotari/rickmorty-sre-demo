@@ -5,7 +5,11 @@ Covers:
 * TTL-based refresh that no-ops when recently refreshed.
 """
 
+import logging
 import pytest
+
+from contextlib import asynccontextmanager
+
 from app import db, ingest, crud, api
 
 
@@ -265,3 +269,80 @@ async def test_refresh_if_stale_success_path(monkeypatch):
     assert n == 1
     # age should be small (recently set); just ensure it's numeric
     assert isinstance(ingest.last_refresh_age(), float)
+
+
+@pytest.mark.asyncio
+async def test_pg_advisory_lock_logs_release_when_supported(caplog, monkeypatch):
+    """
+    Force the advisory lock *and* unlock paths to 'succeed' so we hit the
+    '...released' log line in the finally-block.
+    """
+    # Fresh in-memory DB
+    db.configure_engine("sqlite+aiosqlite:///:memory:")
+    await db.init_db()
+
+    class FakeResult:
+        def scalar(self):
+            return True  # reports lock acquired
+
+    async def fake_execute(_sql, _params=None):
+        # Pretend both pg_try_advisory_lock and pg_advisory_unlock succeed
+        return FakeResult()
+
+    caplog.set_level(logging.DEBUG, logger="app.ingest")
+
+    async with db.SessionLocal() as s:
+        # Patch session.execute so both lock and unlock "work"
+        monkeypatch.setattr(s, "execute", fake_execute)
+
+        async with ingest._pg_advisory_lock(s, 0xBEEF) as have:
+            assert have is True
+
+    # Should see the 'released' message (covers line ~53)
+    assert any(
+        "advisory_lock key=" in rec.message and "released" in rec.message
+        for rec in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_initial_sync_logs_skip_when_already_populated(caplog, monkeypatch):
+    """Seed using the SAME session, then call initial_sync_if_empty() to hit the skip log."""
+    db.configure_engine("sqlite+aiosqlite:///:memory:")
+    await db.init_db()
+
+    caplog.set_level(logging.DEBUG, logger="app.ingest")
+
+    # Ensure we always "hold" the advisory lock to reach the count branch.
+    @asynccontextmanager
+    async def fake_lock(_session, _key):
+        yield True
+
+    monkeypatch.setattr(ingest, "_pg_advisory_lock", fake_lock)
+
+    async with db.SessionLocal() as s:
+        # Seed one row
+        await crud.upsert_characters(
+            s,
+            [
+                {
+                    "id": 1,
+                    "name": "Beth Smith",
+                    "status": "Alive",
+                    "species": "Human",
+                    "origin": "Earth (C-137)",
+                    "image": None,
+                    "url": None,
+                }
+            ],
+        )
+
+        # Now call initial_sync in the SAME session/connection
+        n = await ingest.initial_sync_if_empty(s)
+        assert n == 0  # skipped branch returns 0
+
+    # Should see the 'skipped' debug (covers lines 75–76)
+    assert any(
+        "initial_sync skipped: table already populated" in rec.message
+        for rec in caplog.records
+    )

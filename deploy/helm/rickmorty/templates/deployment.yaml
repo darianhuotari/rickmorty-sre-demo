@@ -38,10 +38,35 @@ spec:
             - name: http
               containerPort: 8000
           env:
+            # --- DB wait / startup backoff ---
+            {{- with .Values.env.DB_WAIT_MAX_ATTEMPTS }}
+            - name: DB_WAIT_MAX_ATTEMPTS
+              value: "{{ . }}"
+            {{- end }}
+            {{- with .Values.env.DB_WAIT_BACKOFF_START }}
+            - name: DB_WAIT_BACKOFF_START
+              value: "{{ . }}"
+            {{- end }}
+            {{- with .Values.env.DB_WAIT_BACKOFF_MAX }}
+            - name: DB_WAIT_BACKOFF_MAX
+              value: "{{ . }}"
+            {{- end }}
+
+            # --- SQLAlchemy pool tuning ---
+            {{- with .Values.env.DB_POOL_SIZE }}
+            - name: DB_POOL_SIZE
+              value: "{{ . }}"
+            {{- end }}
+            {{- with .Values.env.DB_MAX_OVERFLOW }}
+            - name: DB_MAX_OVERFLOW
+              value: "{{ . }}"
+            {{- end }}
+            {{- with .Values.env.DB_POOL_RECYCLE }}
+            - name: DB_POOL_RECYCLE
+              value: "{{ . }}"
+            {{- end }}
             - name: PORT
               value: "8000"
-            - name: RATE_LIMIT
-              value: {{ .Values.env.RATE_LIMIT | quote }}
             - name: CACHE_TTL
               value: {{ .Values.env.CACHE_TTL | quote }}
             - name: MAX_RETRIES
@@ -63,16 +88,6 @@ spec:
                   name: "{{- if .Values.database.existingSecret -}}{{ .Values.database.existingSecret }}{{- else if .Values.database.createSecret -}}{{ include "rickmorty.fullname" . }}-db{{- else -}}{{ include "rickmorty.fullname" . }}-conn{{- end -}}"
                   key: {{ .Values.database.key }}
             {{- end }}
-
-            # REDIS_URL: existingSecret -> -ratelimit -> -conn (when redis.enabled)
-            {{- if or .Values.rateLimit.existingSecret .Values.rateLimit.createSecret .Values.redis.enabled }}
-            - name: REDIS_URL
-              valueFrom:
-                secretKeyRef:
-                  name: "{{- if .Values.rateLimit.existingSecret -}}{{ .Values.rateLimit.existingSecret }}{{- else if .Values.rateLimit.createSecret -}}{{ include "rickmorty.fullname" . }}-ratelimit{{- else -}}{{ include "rickmorty.fullname" . }}-conn{{- end -}}"
-                  key: {{ .Values.rateLimit.key | default "REDIS_URL" }}
-            {{- end }}
-
 
           volumeMounts:
             - name: app-logs
