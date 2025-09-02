@@ -64,7 +64,9 @@ jobs:
           cache: pip
 
       - name: Install deps (runtime + e2e)
-        run: make e2e
+        run: |
+          make install
+          pip install -r requirements-e2e.txt
 
       - name: Setup Kind cluster
         run: make kind-up
