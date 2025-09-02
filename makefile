@@ -49,7 +49,7 @@ test:
 	$(PYTHON) -m pytest tests --ignore=tests/test_e2e.py --cov=app --cov-report=term-missing --cov-fail-under=80 -v
 
 coverage:
-	$(PYTHON) -m pytest --cov=app --cov-report=html
+	$(PYTHON) -m pytest tests --ignore=tests/test_e2e.py --cov=app --cov-report=html
 
 clean:
 	rm -rf __pycache__ .pytest_cache .mypy_cache .coverage htmlcov
