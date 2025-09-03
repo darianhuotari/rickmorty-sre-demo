@@ -3,7 +3,7 @@
 
 Todo:
 
-Build and upload docker image
+Cleanup helm chart(s)?
 
 Add lightweight health endpoint for k8s probes (except maybe startup)
 
@@ -13,13 +13,18 @@ Code security / quality checks in CI
 
 Dependency manager in CI
 
+lightweight image scan (Trivy)
+
+Note on using docker-compose & that an in-memory DB is used
+
 Architecture
 
 Documentation / readme updates
 
 
 Prod discussion points:
-Secret management?
+Require tests to pass before allowing merges
+Secret management
 Track request IDs via headers
 TLS?
 Simplify helm chart layout?
