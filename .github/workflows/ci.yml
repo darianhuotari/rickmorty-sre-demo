@@ -54,8 +54,6 @@ jobs:
           filters: |
             e2e:
               - 'deploy/**'
-              - 'deploy/helm/**'
-              - 'chart/**'
               - 'Dockerfile'
               - 'tests/test_e2e.py'
               - '.github/workflows/**'

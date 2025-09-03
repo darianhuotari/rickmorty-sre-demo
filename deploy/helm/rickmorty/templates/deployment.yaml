@@ -8,6 +8,12 @@ spec:
   {{- if not .Values.hpa.enabled }}
   replicas: {{ default 1 .Values.replicaCount }}
   {{- end }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0 # always keep all old pods running until new ones are ready
+      maxSurge: 50%  # allow extra pods during rollout
+    minReadySeconds: 10 # wait before marking pod available
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ .Chart.Name }}
@@ -20,6 +26,7 @@ spec:
         # roll pods when ConfigMap/Secret changes
         checksum/fluentbit: {{ include (print $.Template.BasePath "/configmap-fluentbit.yaml") . | sha256sum }}
     spec:
+      terminationGracePeriodSeconds: 60 # allow time for graceful shutdown
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       volumes:
@@ -39,6 +46,10 @@ spec:
           ports:
             - name: http
               containerPort: 8000
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh","-c","sleep 20"]  # allow endpoint removal from LB before SIGTERM
           env:
             # --- DB wait / startup backoff ---
             {{- with .Values.env.DB_WAIT_MAX_ATTEMPTS }}
@@ -98,18 +109,25 @@ spec:
             httpGet:
               path: /healthcheck
               port: http
-            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          # livenessProbe should be looser than readinessProbe so we stop traffic before 
+          # restarting the container. 
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
             periodSeconds: 10
             timeoutSeconds: 3
-            failureThreshold: 3
-          livenessProbe:
+            failureThreshold: 4
+          startupProbe:
             httpGet:
               path: /healthcheck
               port: http
-            initialDelaySeconds: 10
-            periodSeconds: 20
-            timeoutSeconds: 5
-            failureThreshold: 3
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 12 # ~2 minutes max startup time
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
         {{- if .Values.fluentbit.enabled }}

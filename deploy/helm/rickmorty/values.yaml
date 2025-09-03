@@ -1,37 +1,42 @@
+# --- Image ---
 image:
-  repository: rickmorty-sre-demo    # change to your registry/repo
+  repository: rickmorty-sre-demo
   tag: latest
   pullPolicy: IfNotPresent
 
-replicaCount: 2 # shouldn't be active since we have HPA; but set a default anyway
+# Used only when HPA is disabled; keep a sane default.
+replicaCount: 2
 
+# --- Service ---
 service:
   type: ClusterIP
   port: 8000
 
+# --- Ingress ---
 ingress:
   enabled: true
   className: nginx
   annotations: {}
   hosts:
-    - host: rickmorty.local    # change for your domain
+    - host: rickmorty.local
       paths:
         - path: /
           pathType: Prefix
-  tls: []   # e.g., - secretName: rickmorty-tls; hosts: [rickmorty.example.com]
+  tls: []  # e.g., - secretName: rickmorty-tls; hosts: [rickmorty.example.com]
 
   # NGINX rate limiting (per-client IP by default)
   rateLimit:
-    rps: 50                  # requests per second per client
-    burst: 100               # token bucket burst
-    noDelay: false           # true => serve bursts immediately; false => gently pace
-    connections: 20          # concurrent connections per client
-    #statusCode: 429          # status code on limit (ingress-nginx supports this)
-    key: "$binary_remote_addr"  # rate-limit key (e.g. $binary_remote_addr, $http_x_api_key)
+    rps: 50            # requests per second per client
+    burst: 100         # token bucket burst
+    noDelay: false     # true => serve bursts immediately; false => pace bursts
+    connections: 20    # concurrent connections per client
+    #statusCode: 429   # not supported by ingress-nginx
+    key: "$binary_remote_addr"  # rate-limit key (e.g., $binary_remote_addr, $http_x_api_key)
 
+# --- Resources (requests are important for HPA) ---
 resources:
   limits:
-    #cpu: "500m" No CPU limit; not multitenant
+    #cpu: "500m"       # omit CPU limit for latency-sensitive services
     memory: "512Mi"
   requests:
     cpu: "250m"
@@ -41,58 +46,56 @@ nodeSelector: {}
 tolerations: []
 affinity: {}
 
+# --- HPA ---
 hpa:
   enabled: true
   minReplicas: 2
   maxReplicas: 6
-  # Targets are percentages of requested resources
+  # Targets are percentages of *requested* resources
   cpuUtilization: 70
   memoryUtilization: 80
 
-# App configuration
+# --- App env configuration ---
 env:
   CACHE_TTL: "300"
   MAX_RETRIES: "5"
   REQUEST_TIMEOUT: "10"
   REFRESH_WORKER_ENABLED: "1"
   REFRESH_INTERVAL: "300"
-  LOG_FILE_PATH: "/var/log/app/app.log"  # main container writes to this; sidecar tails it
+  LOG_FILE_PATH: "/var/log/app/app.log"  # main container writes; sidecar tails
 
-    # --- DB wait / startup backoff ---
-  DB_WAIT_MAX_ATTEMPTS: 10        # how many ping attempts before giving up
-  DB_WAIT_BACKOFF_START: 1.0      # seconds (first wait)
-  DB_WAIT_BACKOFF_MAX: 10.0       # seconds (cap)
+  # DB wait / startup backoff
+  DB_WAIT_MAX_ATTEMPTS: 10
+  DB_WAIT_BACKOFF_START: 1.0
+  DB_WAIT_BACKOFF_MAX: 10.0
 
-  # --- SQLAlchemy pool tuning (only used for Postgres URLs) ---
-  DB_POOL_SIZE: 5                 # base pool size
-  DB_MAX_OVERFLOW: 10             # how many extra conns beyond pool_size
-  DB_POOL_RECYCLE: 1800           # seconds; proactively recycle idle conns
+  # SQLAlchemy pool tuning (only used for Postgres URLs)
+  DB_POOL_SIZE: 5
+  DB_MAX_OVERFLOW: 10
+  DB_POOL_RECYCLE: 1800
 
-# Database configuration
-
-# Note regarding secret config - pick exactly one:
-# 1) postgresql.enabled: true     -> chart creates <release>-conn and injects it
-# 2) database.existingSecret: ""  -> use ESO/Vault-created secret (recommended for prod)
-# 3) database.createSecret: true  -> DEV/DEMO ONLY: chart creates secret from database.url
+# --- Database configuration ---
+# Pick exactly one path:
+# 1) postgresql.enabled: true      -> chart creates <release>-conn and injects it
+# 2) database.existingSecret: ""   -> ESO/Vault-produced Secret (recommended for prod)
+# 3) database.createSecret: true   -> DEV/DEMO ONLY: create Secret from database.url
 database:
-  # If you manage secrets yourself (Vault/ExternalSecrets), set existingSecret and key
-  existingSecret: ""     # e.g., "rmdb-secret"
-  key: "DATABASE_URL"    # the key inside the Secret holding the URL
-  # Or have the chart create a Secret from values below (not recommended for real prod)
+  existingSecret: ""          # e.g., "rmdb-secret"
+  key: "DATABASE_URL"         # key inside the Secret
   createSecret: false
-  url: ""                # e.g., "postgresql+asyncpg://rick:rickpass@postgres:5432/rmdb"
+  url: ""                     # e.g., "postgresql+asyncpg://rick:rickpass@postgres:5432/rmdb"
 
 postgresql:
   enabled: true
   auth:
     username: rick
-    password: rickpass
-    database: rmdb # Password is set here for demo purposes, not for production use
+    password: rickpass        # demo only; do not use in prod
+    database: rmdb
   primary:
     persistence:
-      enabled: false  # ephemeral for demo; set true with a StorageClass in prod
+      enabled: false          # ephemeral for demo; set true with a StorageClass in prod
 
-# Fluent Bit log sidecar (tail a shared emptyDir and ship to stdout)
+# --- Fluent Bit log sidecar (tails shared emptyDir, ships to stdout) ---
 fluentbit:
   enabled: true
   image: "cr.fluentbit.io/fluent/fluent-bit:2.1.10"
@@ -103,9 +106,9 @@ fluentbit:
     limits:
       cpu: 200m
       memory: 128Mi
-  # Minimal config: tail the shared file and print to stdout (k8s will collect)
   inputPath: "/var/log/app/app.log"
 
+# --- Security contexts ---
 podSecurityContext:
   runAsNonRoot: true
   runAsUser: 10001
