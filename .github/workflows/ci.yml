@@ -49,3 +49,30 @@ jobs:
           name: coverage-html-${{ github.run_id }}
           path: htmlcov/
           if-no-files-found: warn
+
+  e2e-test:
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install deps (runtime + e2e)
+        run: |
+          make install
+          pip install -r requirements-e2e.txt
+
+      - name: Setup Kind cluster and run e2e tests
+        run: |
+          make kind-up
+          make test-e2e
+
+      - name: Cleanup Kind cluster
+        if: always()
+        run: make kind-down

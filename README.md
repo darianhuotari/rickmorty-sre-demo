@@ -2,9 +2,9 @@
 
 
 Todo:
-Write make commands to standup / teardown cluster
+
 Build and write docker iamge
-bring cluster online in CI via make for integration testing
+
 
 Prod stuff:
 Secret management?
