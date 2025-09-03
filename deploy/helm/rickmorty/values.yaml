@@ -3,7 +3,7 @@ image:
   tag: latest
   pullPolicy: IfNotPresent
 
-# replicaCount: 2 # don't need a replica count since we have hpa
+replicaCount: 2 # shouldn't be active since we have HPA; but set a default anyway
 
 service:
   type: ClusterIP
@@ -69,6 +69,11 @@ env:
   DB_POOL_RECYCLE: 1800           # seconds; proactively recycle idle conns
 
 # Database configuration
+
+# Note regarding secret config - pick exactly one:
+# 1) postgresql.enabled: true     -> chart creates <release>-conn and injects it
+# 2) database.existingSecret: ""  -> use ESO/Vault-created secret (recommended for prod)
+# 3) database.createSecret: true  -> DEV/DEMO ONLY: chart creates secret from database.url
 database:
   # If you manage secrets yourself (Vault/ExternalSecrets), set existingSecret and key
   existingSecret: ""     # e.g., "rmdb-secret"
@@ -76,6 +81,16 @@ database:
   # Or have the chart create a Secret from values below (not recommended for real prod)
   createSecret: false
   url: ""                # e.g., "postgresql+asyncpg://rick:rickpass@postgres:5432/rmdb"
+
+postgresql:
+  enabled: true
+  auth:
+    username: rick
+    password: rickpass
+    database: rmdb # Password is set here for demo purposes, not for production use
+  primary:
+    persistence:
+      enabled: false  # ephemeral for demo; set true with a StorageClass in prod
 
 # Fluent Bit log sidecar (tail a shared emptyDir and ship to stdout)
 fluentbit:
@@ -104,20 +119,3 @@ containerSecurityContext:
   readOnlyRootFilesystem: true
   capabilities:
     drop: ["ALL"]
-
-postgresql:
-  enabled: true
-  auth:
-    username: rick
-    password: rickpass
-    database: rmdb
-  primary:
-    persistence:
-      enabled: false  # ephemeral for demo; set true with a StorageClass in prod
-
-# If you manage secrets yourself, keep these empty and use existingSecret like before
-#database:
-#  existingSecret: ""
-# key: DATABASE_URL
-#  createSecret: false
-#  url: ""

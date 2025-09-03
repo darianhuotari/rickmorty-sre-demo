@@ -3,10 +3,22 @@
 
 Todo:
 
-Build and write docker iamge
+Build and upload docker image
+
+Add lightweight health endpoint for k8s probes (except maybe startup)
+
+Add DB TTL as env var / configurable via Helm
+
+Code security / quality checks in CI
+
+Dependency manager in CI
+
+Architecture
+
+Documentation / readme updates
 
 
-Prod stuff:
+Prod discussion points:
 Secret management?
 Track request IDs via headers
 TLS?
