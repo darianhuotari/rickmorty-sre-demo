@@ -5,7 +5,9 @@ metadata:
   labels:
     {{- include "rickmorty.labels" . | nindent 4 }}
 spec:
-  replicas: {{ .Values.replicaCount }}
+  {{- if not .Values.hpa.enabled }}
+  replicas: {{ default 1 .Values.replicaCount }}
+  {{- end }}
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ .Chart.Name }}

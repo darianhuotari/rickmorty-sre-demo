@@ -3,11 +3,28 @@
 
 Todo:
 
-Build and write docker iamge
+Cleanup helm chart(s)?
+
+Add lightweight health endpoint for k8s probes (except maybe startup)
+
+Add DB TTL as env var / configurable via Helm
+
+Code security / quality checks in CI
+
+Dependency manager in CI
+
+lightweight image scan (Trivy)
+
+Note on using docker-compose & that an in-memory DB is used
+
+Architecture
+
+Documentation / readme updates
 
 
-Prod stuff:
-Secret management?
+Prod discussion points:
+Require tests to pass before allowing merges
+Secret management
 Track request IDs via headers
 TLS?
 Simplify helm chart layout?
