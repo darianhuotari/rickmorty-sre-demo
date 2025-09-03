@@ -2,11 +2,6 @@
 
 
 Todo:
-bring cluster online in CI via make for integration testing
-
-Move helm dependency ( cd deploy/helm/rickmorty
-  helm dependency update
-  cd ../../..) to makefile?
 
 Build and write docker iamge
 

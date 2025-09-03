@@ -106,7 +106,7 @@ containerSecurityContext:
     drop: ["ALL"]
 
 postgresql:
-  enabled: true # why is this false
+  enabled: true
   auth:
     username: rick
     password: rickpass
