@@ -210,7 +210,8 @@ kind-up:
 	@echo "✅ kind cluster '$(KIND_CLUSTER)' and app are up."
 	@echo "   - Tail app logs:      make logs"
 	@echo "   - Port-forward NGINX: make port-forward"
-	@echo "   - Tear-down cluster: make kind-down"
+	@echo "   - Run e2e tests:		make e2e-test (automatically handles port-forward)"
+	@echo "   - Tear-down cluster: 	make kind-down"
 
 # Be forgiving during early boot; ignore failures with leading '-'
 _wait-core:

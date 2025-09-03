@@ -153,6 +153,16 @@ async def root(_request: Request):
     return RedirectResponse(url=app.docs_url or "/docs", status_code=307)
 
 
+@app.get("/healthz", include_in_schema=False)
+async def healthz():
+    """Lightweight, in-process health endpoint.
+
+    Always returns 200 if the app can serve requests.
+    Safe for liveness/readiness probes without hitting DB or network.
+    """
+    return {"status": "ok"}
+
+
 @app.get(
     "/healthcheck",
     response_model=HealthcheckOut,

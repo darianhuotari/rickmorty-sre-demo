@@ -100,3 +100,11 @@ def test_docs_page_loads():
     resp = client.get("/")  # follow_redirects=True by default
     assert resp.status_code == 200
     assert "Swagger UI" in resp.text  # sanity check
+
+
+def test_healthz_always_ok():
+    """The /healthz endpoint should always return 200/ok for k8s probes."""
+    client = TestClient(app_main.app)
+    resp = client.get("/healthz")
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "ok"}

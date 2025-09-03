@@ -36,15 +36,20 @@ def test_background_refresher_runs_and_stops(monkeypatch):
 
 def test_healthcheck_includes_last_refresh_age(monkeypatch):
     """Expose a numeric 'last_refresh_age' when a refresh has occurred."""
-    # Pretend we refreshed 42 seconds ago
-    ingest._last_refresh_ts = time.time() - 42
+    # Set refresh time and capture exact time for comparison; pretend we refreshed 42s ago
+    set_time = time.time()
+    age_seconds = 42
+    ingest._last_refresh_ts = set_time - age_seconds
 
     client = TestClient(app_main.app)
     r = client.get("/healthcheck")
     j = r.json()
 
     assert "last_refresh_age" in j
-    assert 40 <= j["last_refresh_age"] <= 45
+    # Allow for test execution time, but ensure age is reasonable
+    assert (
+        age_seconds <= j["last_refresh_age"] <= age_seconds + 2
+    )  # 2s buffer for test execution
 
 
 def test_background_refresher_exception_is_swallowed(monkeypatch):

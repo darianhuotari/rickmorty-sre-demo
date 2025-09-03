@@ -5,7 +5,9 @@ Todo:
 
 Cleanup helm chart(s)?
 
-Add lightweight health endpoint for k8s probes (except maybe startup)
+connection draining to allow client requests time to complete?
+
+Add logging for connected to DB; log out DB host (construct conn string?)
 
 Add DB TTL as env var / configurable via Helm
 
@@ -24,6 +26,8 @@ Documentation / readme updates
 
 Prod discussion points:
 Require tests to pass before allowing merges
+PDB
+Readiness probe trade-offs (shed load early, etc)
 Secret management
 Track request IDs via headers
 TLS?
