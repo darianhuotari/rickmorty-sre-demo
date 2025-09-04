@@ -57,7 +57,8 @@ hpa:
 
 # --- App env configuration ---
 env:
-  CACHE_TTL: "300"  # In-process cache TTL in seconds
+  PAGE_CACHE_TTL: "30" # In-process page cache TTL in seconds
+  CACHE_TTL: "300" # Upstream cache TTL in seconds
   MAX_RETRIES: "5"
   REQUEST_TIMEOUT: "10"
   REFRESH_WORKER_ENABLED: "1" # "1" to enable, "0" to disable

@@ -26,7 +26,7 @@ else
     ACTIVATE = source $(VENV)/bin/activate
 endif
 
-.PHONY: help venv install dev run lint format test coverage clean security security-tools
+.PHONY: help venv install dev run stop lint format test coverage clean security security-tools
 
 venv:
 ifeq ($(OS),Windows_NT)
@@ -42,7 +42,14 @@ dev: install
 	$(PIP) install -r requirements-dev.txt
 
 run:
-	$(PYTHON) -m uvicorn app.main:app --reload --port 8000
+	$(PYTHON) -m uvicorn app.main:app --reload --port 8000 --workers 1
+
+stop:
+ifeq ($(OS),Windows_NT)
+	@powershell -NoProfile -Command "$$p = Get-CimInstance Win32_Process | Where-Object { $$_.CommandLine -match 'uvicorn' -and $$_.CommandLine -match 'app\.main:app' }; if ($$p) { $$p | ForEach-Object { Write-Host 'Stopping PID' $$_.ProcessId; Stop-Process -Id $$_.ProcessId -Force } } else { Write-Host 'No uvicorn process found.' }"
+else
+	@pkill -f "uvicorn app.main:app" || echo "No uvicorn process found"
+endif
 
 lint:
 	$(PYTHON) -m pip install black flake8 --quiet
@@ -55,6 +62,7 @@ format:
 test:
 	$(PYTHON) -m pytest tests --ignore=tests/test_e2e.py --cov=app --cov-report=term-missing --cov-fail-under=80 -v
 
+# Outputs app logs during tests
 test-logs:
 	$(PYTHON) -m pytest tests --ignore=tests/test_e2e.py --cov=app --cov-report=term-missing --cov-fail-under=80 -v --log-cli-level=INFO
 

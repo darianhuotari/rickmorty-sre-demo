@@ -1,0 +1,59 @@
+{
+  "info": {
+    "count": 826,
+    "pages": 2,
+    "next": "https://rickandmortyapi.com/api/character?page=2",
+    "prev": null
+  },
+  "results": [
+    {
+      "id": 1,
+      "name": "Rick Sanchez",
+      "status": "Alive",
+      "species": "Human",
+      "origin": { "name": "Earth (C-137)" }
+    },
+    {
+      "id": 2,
+      "name": "Morty Smith",
+      "status": "Alive",
+      "species": "Human",
+      "origin": { "name": "Earth (C-137)" }
+    },
+    {
+      "id": 3,
+      "name": "Summer Smith",
+      "status": "Alive",
+      "species": "Human",
+      "origin": { "name": "Earth (Replacement Dimension)" }
+    },
+    {
+      "id": 4,
+      "name": "Beth Smith",
+      "status": "Alive",
+      "species": "Human",
+      "origin": { "name": "Earth (Replacement Dimension)" }
+    },
+    {
+      "id": 5,
+      "name": "Jerry Smith",
+      "status": "Alive",
+      "species": "Human",
+      "origin": { "name": "Earth (C-137)" }
+    },
+    {
+      "id": 6,
+      "name": "Birdperson",
+      "status": "Alive",
+      "species": "Bird-Person",
+      "origin": { "name": "Bird World" }
+    },
+    {
+      "id": 7,
+      "name": "Mr. Meeseeks",
+      "status": "Alive",
+      "species": "Meeseeks",
+      "origin": { "name": "Mr. Meeseeks Box" }
+    }
+  ]
+}

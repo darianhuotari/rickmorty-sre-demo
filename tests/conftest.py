@@ -8,10 +8,13 @@ if ROOT not in sys.path:
 # --------------------------------------
 
 import pytest_asyncio
+import json
+import pathlib
+
 from contextlib import asynccontextmanager
 
 
-# Force an in-memory SQLite for tests so we never touch Postgres pooling.
+# Force an in-memory SQLite for unit tests so we never touch Postgres pooling.
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 # Ensure no leftover pool envs confuse SQLAlchemy in tests
 os.environ.pop("DB_POOL_SIZE", None)
@@ -21,8 +24,14 @@ from app import db  # noqa: E402
 
 # Make sure the already-imported module uses our test URL
 db.configure_engine(os.environ["DATABASE_URL"])
-from app import db
+
 import app.main as app_main  # patch names bound inside main.py
+
+FIXTURES = pathlib.Path(__file__).parent / "fixtures"
+
+
+def load_fixture(name: str) -> dict:
+    return json.loads((FIXTURES / name).read_text())
 
 
 @pytest_asyncio.fixture(autouse=True)

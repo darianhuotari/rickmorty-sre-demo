@@ -11,7 +11,21 @@ Add DB TTL as env var / configurable via Helm
 
 Dependency manager in CI
 
-Note on using docker-compose & that an in-memory DB is used
+Note on using docker-compose & that an in-memory DB is used in unit-tests
+
+Manually test behavior for invalid gets on /character; add unit / int tests if necessary
+
+Add an in-process cache + expose config to Helm
+
+/metrics endpoint (with 1–2 custom metrics).
+
+Grafana dashboard JSON.
+
+Prometheus alert rules.
+
+Distributed tracing (OpenTelemetry/Jaeger).
+
+3 production-ready alerts (based on metrics endpoint, and optionally others)
 
 Architecture
 
@@ -30,8 +44,6 @@ Simplify helm chart layout?
 
 
 Run locally: uvicorn app.main:app --reload --port 8000
-
-# Rick & Morty SRE Demo
 
 A demo application that integrates with the [Rick and Morty API](https://rickandmortyapi.com/documentation/#rest).
 

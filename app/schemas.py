@@ -21,6 +21,7 @@ class CharactersPage(BaseModel):
     total_pages: int
     has_prev: bool
     has_next: bool
+    out_of_range: bool = False
     results: List[CharacterOut]
 
 

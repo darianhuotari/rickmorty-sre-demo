@@ -2,10 +2,11 @@
 
 This module encapsulates all interactions with the public Rick & Morty REST API,
 including robust retry/backoff behavior, pagination handling, and a very small
-in-process cache for call coalescing. It also exposes a quick upstream probe
+in-process cache for upstream call coalescing. It also exposes a quick upstream probe
 used by the application's health check.
 """
 
+import logging
 import os
 import time
 import random
@@ -14,14 +15,43 @@ from typing import List, Dict, Any, Tuple
 
 import httpx
 from fastapi import HTTPException
+from email.utils import parsedate_to_datetime
 
 BASE_URL = "https://rickandmortyapi.com/api/character"
 CACHE_TTL = int(os.getenv("CACHE_TTL", "300"))  # seconds
 MAX_RETRIES = int(os.getenv("MAX_RETRIES", "5"))
 REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "10"))
 
-# very simple in-memory cache
+# very simple in-memory cache to avoid hammering upstream on every request
 _cache: Dict[str, Any] = {"ts": 0.0, "data": None}
+
+log = logging.getLogger(__name__)
+
+
+def _parse_retry_after(value: str | None) -> float | None:
+    """Parse a ``Retry-After`` header value.
+
+    Supports both integer seconds and HTTP-date formats.
+
+    Args:
+        value: Header value or ``None``.
+
+    Returns:
+        Seconds to wait as a float, or ``None`` if the value is missing or invalid.
+    """
+
+    if not value:
+        return None
+    if value.isdigit():
+        return float(value)
+    try:
+        # HTTP-date -> seconds from now
+        dt = parsedate_to_datetime(value)
+        if dt is not None:
+            return max(0.0, (dt - dt.now(dt.tzinfo)).total_seconds())
+    except Exception:
+        pass
+    return None
 
 
 async def _request_with_retry(
@@ -44,30 +74,67 @@ async def _request_with_retry(
         HTTPException: If all retries are exhausted (503).
     """
     backoff = 0.5
-    for _ in range(1, MAX_RETRIES + 1):
+    attempt = 0
+
+    for attempt in range(1, MAX_RETRIES + 1):
         try:
             r = await client.get(url, params=params, timeout=REQUEST_TIMEOUT)
+
             if r.status_code == 429 or 500 <= r.status_code < 600:
-                ra = r.headers.get("Retry-After")
+                ra_hdr = r.headers.get("Retry-After")
+                ra = _parse_retry_after(ra_hdr)
                 delay = (
-                    float(ra)
-                    if ra and ra.isdigit()
-                    else backoff
-                    + random.random() * 0.25  # nosec B311; jitter algorithm
+                    ra if ra is not None else backoff + random.random() * 0.25
+                )  # nosec B311
+
+                log.warning(
+                    "upstream.retry status=%d attempt=%d/%d url=%s retry_after=%s delay=%.3fs",
+                    r.status_code,
+                    attempt,
+                    MAX_RETRIES,
+                    url,
+                    ra_hdr,
+                    delay,
                 )
+
                 await asyncio.sleep(delay)
                 backoff = min(backoff * 2, 8.0)
                 continue
+
             r.raise_for_status()
+            if attempt > 1:
+                log.info(
+                    "upstream.recovered attempt=%d url=%s status=%d",
+                    attempt,
+                    url,
+                    r.status_code,
+                )
             return r
+
         except (
             httpx.ReadTimeout,
             httpx.ConnectTimeout,
             httpx.RemoteProtocolError,
             httpx.TransportError,
-        ):
+        ) as exc:
+            log.warning(
+                "upstream.error attempt=%d/%d url=%s err=%r backoff=%.3fs",
+                attempt,
+                MAX_RETRIES,
+                url,
+                exc,
+                backoff,
+            )
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, 8.0)
+
+    # If we got here, all attempts failed
+    log.error(
+        "upstream.failed url=%s attempts=%d detail=%s",
+        url,
+        MAX_RETRIES,
+        "exhausted retries",
+    )
     raise HTTPException(
         status_code=503, detail="Upstream API unavailable after retries"
     )

@@ -59,7 +59,14 @@ class Base(DeclarativeBase):
 
 
 def _safe_url_parts(url_str: str) -> dict:  # NEW
-    """Parse an SQLAlchemy URL and return non-sensitive parts for logging."""
+    """Parse an SQLAlchemy URL and return non-sensitive parts for logging.
+
+    Args:
+        url_str: SQLAlchemy connection URL string.
+
+    Returns:
+        Dict with ``driver``, ``host``, ``port``, and ``database`` keys.
+    """
     try:
         u: URL = make_url(url_str)
         return {
@@ -105,7 +112,17 @@ def _register_engine_listeners(eng) -> None:
 
 
 def _mk_engine(url: str):
-    """Build an async engine with sensible defaults by backend."""
+    """Build an async engine with sensible defaults per backend.
+
+    Chooses pool classes for SQLite variants and applies optional Postgres
+    pooling hints via environment variables.
+
+    Args:
+        url: Async SQLAlchemy URL.
+
+    Returns:
+        sqlalchemy.ext.asyncio.AsyncEngine: Configured engine.
+    """
     kwargs: dict = {"pool_pre_ping": True}
 
     if url.startswith("sqlite+aiosqlite:///:memory:"):

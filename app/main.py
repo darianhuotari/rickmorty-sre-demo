@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import api, crud, ingest
 from .db import get_session, init_db, wait_for_db
+from .page_cache import page_cache
 from .schemas import CharactersPage, HealthcheckOut, ProblemDetail
 from .logging_config import configure_logging
 
@@ -104,7 +105,8 @@ async def lifespan(app: FastAPI):
         log.info("startup.initial_sync_if_empty upserted=%d", n)
         break
 
-    # 4) Optional background refresher (prod can use a CronJob instead)
+    # 4) Optional background refresher (we could move this to a cron /
+    # dedicated microservice in prod)
     enabled = os.getenv("REFRESH_WORKER_ENABLED", "1") not in ("0", "false", "False")
     stop_event = asyncio.Event()
     task = None
@@ -219,44 +221,86 @@ async def characters(
     page_size: int = Query(20, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
 ):
-    """Return paginated, sorted characters from the database."""
-    try:
-        rows, total_count = await crud.list_characters(
-            session, sort, order, page, page_size
+    """Return paginated, sorted characters from the database (LRU+TTL cached).
+
+    The per-pod cache keys on (sort, order, page, page_size). We:
+      1) Attempt a cache hit.
+      2) If miss, acquire a per-key lock (singleflight).
+      3) Re-check cache after acquiring the lock.
+      4) On miss, query the DB, build the response, store, and return.
+
+    Args:
+        request: Incoming FastAPI request (unused; reserved for future).
+        sort: Sort field, one of {"id","name"}.
+        order: Sort order, one of {"asc","desc"}.
+        page: 1-based page number.
+        page_size: Items per page (1–100).
+        session: Async SQLAlchemy session.
+
+    Returns:
+        CharactersPage JSON object (possibly served from the cache).
+    """
+    # -------- Cache fast-path --------
+    key = page_cache.key(sort, order, page, page_size)
+    cached = page_cache.get(key)
+    if cached is not None:
+        log.info("route.characters cache_hit key=%s", key)
+        return cached
+
+    # -------- Singleflight around DB work --------
+    lock = page_cache.lock_for(key)
+    async with lock:
+        # Another coroutine might have filled the cache while we awaited the lock
+        cached = page_cache.get(key)
+        if cached is not None:
+            log.debug("route.characters cache_hit_after_lock key=%s", key)
+            return cached
+
+        # Miss -> query DB
+        try:
+            rows, total_count = await crud.list_characters(
+                session, sort, order, page, page_size
+            )
+        except Exception as exc:
+            log.info(
+                "route.characters bad_request sort=%s order=%s page=%d page_size=%d error=%r",
+                sort,
+                order,
+                page,
+                page_size,
+                exc,
+            )
+            raise HTTPException(
+                status_code=400, detail="Invalid sort parameter or query"
+            ) from exc
+
+        total_pages = math.ceil(total_count / page_size) if total_count else 0
+        out_of_range = (total_pages > 0 and page > total_pages) or (
+            total_pages == 0 and page > 1
         )
-    except Exception as exc:
+
         log.info(
-            "route.characters bad_request sort=%s order=%s page=%d page_size=%d error=%r",
+            "route.characters sort=%s order=%s page=%d page_size=%d returned=%d total=%d pages=%d out_of_range=%s",
             sort,
             order,
             page,
             page_size,
-            exc,
+            len(rows),
+            total_count,
+            total_pages,
+            out_of_range,
         )
 
-        raise HTTPException(
-            status_code=400, detail="Invalid sort parameter or query"
-        ) from exc
+        resp = {
+            "page": page,
+            "page_size": page_size,
+            "total_count": total_count,
+            "total_pages": total_pages,
+            "has_prev": (page > 1) and not out_of_range,
+            "has_next": (page < total_pages),
+            "out_of_range": out_of_range,
+            "results": [] if out_of_range else rows,
+        }
 
-    total_pages = max(1, math.ceil(total_count / page_size))
-
-    log.info(
-        "route.characters sort=%s order=%s page=%d page_size=%d returned=%d total=%d pages=%d",
-        sort,
-        order,
-        page,
-        page_size,
-        len(rows),
-        total_count,
-        total_pages,
-    )
-
-    return {
-        "page": page,
-        "page_size": page_size,
-        "total_count": total_count,
-        "total_pages": total_pages,
-        "has_prev": page > 1,
-        "has_next": page < total_pages,
-        "results": rows,
-    }
+        page_cache.put(key, resp)
+        return resp
