@@ -14,15 +14,29 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager, suppress
 
+from typing import Any
 from fastapi import FastAPI, HTTPException, Query, Depends, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import RedirectResponse, JSONResponse
+from sqlalchemy.exc import (
+    OperationalError,
+    InterfaceError,
+    DatabaseError,
+    ProgrammingError,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import api, crud, ingest
 from .db import get_session, init_db, wait_for_db
 from .page_cache import page_cache
 from .schemas import CharactersPage, HealthcheckOut, ProblemDetail
+from .metrics import (
+    install as install_metrics,
+    observe_health,
+    record_cache_hit,
+    record_cache_put,
+    record_cache_error,
+)
 from .logging_config import configure_logging
 
 configure_logging()
@@ -34,6 +48,8 @@ log = logging.getLogger(__name__)
 
 app = FastAPI(title="Rick & Morty Characters", version="0.6.0")
 
+install_metrics(app)
+log.info("Metrics installed")
 
 _STATUS_TITLES = {
     400: "Bad Request",
@@ -41,8 +57,8 @@ _STATUS_TITLES = {
     403: "Forbidden",
     404: "Not Found",
     422: "Unprocessable Entity",
-    429: "Too Many Requests",
     500: "Internal Server Error",
+    503: "Service Unavailable",
 }
 
 
@@ -68,8 +84,18 @@ def _problem(
 @app.exception_handler(HTTPException)
 async def http_exception_handler(_req: Request, exc: HTTPException):
     detail = exc.detail if isinstance(exc.detail, str) else None
-    return _problem(
-        status=exc.status_code, title=_STATUS_TITLES.get(exc.status_code), detail=detail
+    body = {
+        "type": "about:blank",
+        "title": _STATUS_TITLES.get(exc.status_code, "Error"),
+        "status": exc.status_code,
+        "detail": detail,
+        "instance": None,
+    }
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=body,
+        media_type="application/problem+json",
+        headers=exc.headers or None,
     )
 
 
@@ -149,6 +175,26 @@ _problem_resp = {
     "application/problem+json": {"schema": ProblemDetail.model_json_schema()},
 }
 
+_common_error_responses: dict[int | str, dict[str, Any]] = {
+    422: {"content": _problem_resp, "model": ProblemDetail},
+    500: {
+        "content": _problem_resp,
+        "model": ProblemDetail,
+        "description": "Internal server error.",
+    },
+    503: {
+        "content": _problem_resp,
+        "model": ProblemDetail,
+        "description": "Service temporarily unavailable (e.g., database).",
+        "headers": {
+            "Retry-After": {
+                "schema": {"type": "string"},
+                "description": "Seconds or HTTP-date indicating when to retry.",
+            }
+        },
+    },
+}
+
 # ---------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------
@@ -173,7 +219,6 @@ async def healthz():
 @app.get(
     "/healthcheck",
     response_model=HealthcheckOut,
-    responses={429: {"content": _problem_resp, "model": ProblemDetail}},
 )
 async def healthcheck(request: Request, session: AsyncSession = Depends(get_session)):
     """Deep health check for upstream API and database."""
@@ -187,13 +232,16 @@ async def healthcheck(request: Request, session: AsyncSession = Depends(get_sess
         db_ok = False
         log.debug("route.healthcheck.db_error error=%r", exc)
     status = "ok" if (upstream_ok and db_ok) else "degraded"
-    log.info(  # NEW
+    log.info(
         "route.healthcheck status=%s upstream_ok=%s db_ok=%s character_count=%d",
         status,
         upstream_ok,
         db_ok,
         total,
     )
+
+    age = ingest.last_refresh_age()
+    observe_health(db_ok=db_ok, upstream_ok=upstream_ok, age=age)
 
     return {
         "status": status,
@@ -207,11 +255,7 @@ async def healthcheck(request: Request, session: AsyncSession = Depends(get_sess
 @app.get(
     "/characters",
     response_model=CharactersPage,
-    responses={
-        400: {"content": _problem_resp, "model": ProblemDetail},
-        422: {"content": _problem_resp, "model": ProblemDetail},
-        429: {"content": _problem_resp, "model": ProblemDetail},
-    },
+    responses=_common_error_responses,
 )
 async def characters(
     request: Request,
@@ -240,19 +284,38 @@ async def characters(
     Returns:
         CharactersPage JSON object (possibly served from the cache).
     """
-    # -------- Cache fast-path --------
     key = page_cache.key(sort, order, page, page_size)
-    cached = page_cache.get(key)
+
+    # -------- Cache fast-path (GUARDED) --------
+    try:
+        cached = page_cache.get(key)
+    except Exception as exc:
+        record_cache_error("get")
+        log.warning("route.characters page_cache_get_error key=%s err=%r", key, exc)
+        cached = None
+
     if cached is not None:
+        record_cache_hit()
         log.info("route.characters cache_hit key=%s", key)
         return cached
 
     # -------- Singleflight around DB work --------
     lock = page_cache.lock_for(key)
     async with lock:
-        # Another coroutine might have filled the cache while we awaited the lock
-        cached = page_cache.get(key)
+        # Re-check after acquiring the lock (GUARDED)
+        try:
+            cached = page_cache.get(key)
+        except Exception as exc:
+            record_cache_error("get")
+            log.debug(
+                "route.characters page_cache_get_after_lock_error key=%s err=%r",
+                key,
+                exc,
+            )
+            cached = None
+
         if cached is not None:
+            record_cache_hit()
             log.debug("route.characters cache_hit_after_lock key=%s", key)
             return cached
 
@@ -261,9 +324,11 @@ async def characters(
             rows, total_count = await crud.list_characters(
                 session, sort, order, page, page_size
             )
-        except Exception as exc:
+
+        except ValueError as exc:
+            # somehow the client sent an invalid sort/order -> 400
             log.info(
-                "route.characters bad_request sort=%s order=%s page=%d page_size=%d error=%r",
+                "route.characters client_error sort=%s order=%s page=%d page_size=%d err=%r",
                 sort,
                 order,
                 page,
@@ -272,6 +337,34 @@ async def characters(
             )
             raise HTTPException(
                 status_code=400, detail="Invalid sort parameter or query"
+            ) from exc
+
+        except (OperationalError, InterfaceError, asyncio.TimeoutError) as exc:
+            # Transient DB/unavailable -> 503
+            log.warning(
+                "route.characters db_unavailable sort=%s order=%s page=%d page_size=%d error=%r",
+                sort,
+                order,
+                page,
+                page_size,
+                exc,
+            )
+            raise HTTPException(
+                status_code=503,
+                detail="Database temporarily unavailable; please try again.",
+                headers={"Retry-After": "5"},
+            ) from exc
+
+        except (ProgrammingError, DatabaseError) as exc:
+            # Server-side DB bug/schema issue -> 500
+            log.error("route.characters db_error error=%r", exc, exc_info=True)
+            raise HTTPException(status_code=500, detail="Database error.") from exc
+
+        except Exception as exc:
+            # Anything else unexpected -> 500
+            log.exception("route.characters unexpected_error")
+            raise HTTPException(
+                status_code=500, detail="Internal server error."
             ) from exc
 
         total_pages = math.ceil(total_count / page_size) if total_count else 0
@@ -302,5 +395,11 @@ async def characters(
             "results": [] if out_of_range else rows,
         }
 
-        page_cache.put(key, resp)
+        try:
+            page_cache.put(key, resp)
+            record_cache_put()
+        except Exception as exc:
+            record_cache_error("put")
+            log.warning("route.characters page_cache_put_error key=%s err=%r", key, exc)
+
         return resp

@@ -3,21 +3,28 @@
 
 Todo:
 
-Cleanup helm chart(s)?
-
-connection draining to allow client requests time to complete?
-
-Add DB TTL as env var / configurable via Helm
+3 production-ready alerts (based on metrics endpoint, and optionally others)
+- high error rates
+- increasing latency
+- symptom-based / synthetic alerting (external to infra)
 
 Dependency manager in CI
 
-Note on using docker-compose & that an in-memory DB is used in unit-tests
+Architecture
 
-Manually test behavior for invalid gets on /character; add unit / int tests if necessary
+Documentation / readme updates
 
-Add an in-process cache + expose config to Helm
 
-/metrics endpoint (with 1–2 custom metrics).
+
+Move this stuff to discussion.md ---
+
+Prod discussion points:
+
+Ensure connection draining is implemented to allow client requests time to complete during scale-down or deployment operations
+
+We should capture / log request IDs for tracing / correlation
+
+Docker-compose exists but mostly tested via Kind or running the app on the CLI; an in-memory DB is used in unit-tests and a file-based DB is used everywhere else, except in Kind
 
 Grafana dashboard JSON.
 
@@ -25,21 +32,32 @@ Prometheus alert rules.
 
 Distributed tracing (OpenTelemetry/Jaeger).
 
-3 production-ready alerts (based on metrics endpoint, and optionally others)
+GitOps (ArgoCD) / multi-repo setup.
 
-Architecture
+App promotion strategies (tag, image bumper in monorepo, etc)
 
-Documentation / readme updates
+Serve stale data assuming DB is up; serve from cache temporarily (prod should use more persistent cache)
 
-
-Prod discussion points:
 Require tests to pass before allowing merges
 PDB
+
 Readiness probe trade-offs (shed load early, etc)
-Secret management
+
+Proper secret management (Vault, external secret operator like AKV2K8S)
+
 Track request IDs via headers
-TLS?
-Simplify helm chart layout?
+
+TLS (LetsEncrypt on cluster)
+
+Could simplify helm chart layout?
+
+Could simplify tests / rely less on mocking - add better contract testing?
+
+Chaos testing
+
+Load testing (how many RPS can 1 pod handle with various layers of cache, should we split into multiple services, etc)
+
+Leverage suites like hypothesis, mutation tests (cosmic-ray, mutmut)
 
 
 
@@ -55,7 +73,7 @@ A demo application that integrates with the [Rick and Morty API](https://rickand
 - **Database caching** with Postgres (default in Kind) or SQLite (fallback in local dev).
 - **Refresh pipeline** to keep data up to date.
 - **Health checks** for liveness and readiness.
-- **Tests**: unit + end-to-end (Kind cluster).
+- **Tests**: unit / integration, end-to-end (Kind cluster).
 - **CI/CD**: GitHub Actions with linting, tests, security scanning, e2e validation, and Docker Hub publishing.
 
 ---
@@ -64,7 +82,7 @@ A demo application that integrates with the [Rick and Morty API](https://rickand
 
 - REST API with cached responses from Rick & Morty API.
 - Database backend (Postgres or SQLite).
-- Health endpoints:
+- Health /endpoints:
   - `/healthz` – liveness
   - `/healthcheck` – readiness
 - Unit, integration, and e2e test coverage.

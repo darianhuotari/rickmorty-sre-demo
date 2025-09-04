@@ -13,7 +13,7 @@ spec:
     rollingUpdate:
       maxUnavailable: 0 # always keep all old pods running until new ones are ready
       maxSurge: 50%  # allow extra pods during rollout
-    minReadySeconds: 10 # wait before marking pod available
+      minReadySeconds: 10 # wait before marking pod available
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ .Chart.Name }}
@@ -82,6 +82,8 @@ spec:
               value: "8000"
             - name: CACHE_TTL
               value: {{ .Values.env.CACHE_TTL | quote }}
+            - name: PAGE_CACHE_TTL
+              value: {{ .Values.env.PAGE_CACHE_TTL | quote }}
             - name: MAX_RETRIES
               value: {{ .Values.env.MAX_RETRIES | quote }}
             - name: REQUEST_TIMEOUT
@@ -90,6 +92,8 @@ spec:
               value: {{ .Values.env.REFRESH_WORKER_ENABLED | quote }}
             - name: REFRESH_INTERVAL
               value: {{ .Values.env.REFRESH_INTERVAL | quote }}
+            - name: REFRESH_TTL
+              value: {{ .Values.env.REFRESH_TTL | quote }}
             - name: LOG_FILE_PATH
               value: {{ .Values.env.LOG_FILE_PATH | quote }}
 
