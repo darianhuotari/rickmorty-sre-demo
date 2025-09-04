@@ -10,9 +10,10 @@ help:
 	@echo "Testing commands:"
 	@echo "  make test      - run all tests except e2e"
 	@echo "  make test-e2e  - run e2e tests (requires kind cluster)"
+	@echo "Security commands:"
+	@echo "  make security  - run code & dependency security checks"
+
 VENV ?= .venv
-PYTHON = $(VENV)/Scripts/python.exe
-PIP = $(VENV)/Scripts/pip.exe
 
 # Fallbacks for POSIX systems
 ifeq ($(OS),Windows_NT)
@@ -25,10 +26,14 @@ else
     ACTIVATE = source $(VENV)/bin/activate
 endif
 
-.PHONY: help venv install dev run lint format test coverage clean
+.PHONY: help venv install dev run lint format test coverage clean security security-tools
 
 venv:
-	python -m venv $(VENV)
+ifeq ($(OS),Windows_NT)
+	if not exist "$(VENV)\Scripts\python.exe" python -m venv "$(VENV)"
+else
+	@[ -x "$(VENV)/bin/python" ] || python -m venv "$(VENV)"
+endif
 
 install: venv
 	$(PIP) install -r requirements.txt
@@ -50,12 +55,30 @@ format:
 test:
 	$(PYTHON) -m pytest tests --ignore=tests/test_e2e.py --cov=app --cov-report=term-missing --cov-fail-under=80 -v
 
+test-logs:
+	$(PYTHON) -m pytest tests --ignore=tests/test_e2e.py --cov=app --cov-report=term-missing --cov-fail-under=80 -v --log-cli-level=INFO
+
 coverage:
 	$(PYTHON) -m pytest tests --ignore=tests/test_e2e.py --cov=app --cov-report=html
 
 clean:
 	rm -rf __pycache__ .pytest_cache .mypy_cache .coverage htmlcov
 	rm -rf $(VENV)
+
+# Installs local security tooling into the venv
+security-tools: venv
+	"$(PIP)" install --quiet bandit pip-audit
+
+# Runs code and dependency security checks; bandit only fails on high confidence / high severity issues
+security: security-tools
+	@echo Running Bandit...
+	"$(PYTHON)" -m bandit -q -r app -x tests -lll -iii
+	@echo Running pip-audit on requirements.txt...
+	"$(PYTHON)" -m pip_audit -r requirements.txt --strict
+	@echo Running pip-audit on requirements-dev.txt...
+	"$(PYTHON)" -m pip_audit -r requirements-dev.txt --strict
+	@echo Running pip-audit on requirements-e2e.txt...
+	"$(PYTHON)" -m pip_audit -r requirements-e2e.txt --strict
 
 
 # -------- Docker Compose helpers (local dev) --------

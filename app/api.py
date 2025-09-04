@@ -52,7 +52,8 @@ async def _request_with_retry(
                 delay = (
                     float(ra)
                     if ra and ra.isdigit()
-                    else backoff + random.random() * 0.25
+                    else backoff
+                    + random.random() * 0.25  # nosec B311; jitter algorithm
                 )
                 await asyncio.sleep(delay)
                 backoff = min(backoff * 2, 8.0)

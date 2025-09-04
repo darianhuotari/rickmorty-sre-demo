@@ -89,17 +89,19 @@ async def lifespan(app: FastAPI):
     # 1) Wait for the database to be reachable (cold-start friendly)
     try:
         await wait_for_db()
-    except Exception as exc:
-        log.error("Database is not reachable after retries: %s", exc)
+    except Exception as e:
+        log.error("startup.db_wait_failed error=%r", e)
         # Let startup fail so K8s can restart us (or backoff)
         raise
 
     # 2) Create/upgrade schema
     await init_db()
+    log.info("startup.db_init complete")
 
     # 3) Seed once if empty (guarded by advisory-lock in ingest)
     async for session in get_session():
-        await ingest.initial_sync_if_empty(session)
+        n = await ingest.initial_sync_if_empty(session)
+        log.info("startup.initial_sync_if_empty upserted=%d", n)
         break
 
     # 4) Optional background refresher (prod can use a CronJob instead)
@@ -109,15 +111,18 @@ async def lifespan(app: FastAPI):
 
     if enabled:
         interval = float(os.getenv("REFRESH_INTERVAL", "300"))
+        log.info("refresh_worker enabled=true interval=%.3fs", interval)
 
         async def _refresher():
             while not stop_event.is_set():
                 async for s in get_session():
                     try:
-                        await ingest.refresh_if_stale(s)
+                        n = await ingest.refresh_if_stale(s)
+                        if n:
+                            log.info("refresh_worker.cycle upserted=%d", n)
                     except Exception as exc:
                         # keep going; we don't want the task to die
-                        log.warning("Background refresh error (swallowed): %r", exc)
+                        log.warning("refresh_worker.error error=%r", exc)
                     break
                 try:
                     await asyncio.wait_for(stop_event.wait(), timeout=interval)
@@ -176,11 +181,20 @@ async def healthcheck(request: Request, session: AsyncSession = Depends(get_sess
     total = 0
     try:
         total = await crud.count_characters(session)
-    except Exception:
+    except Exception as exc:
         db_ok = False
+        log.debug("route.healthcheck.db_error error=%r", exc)
+    status = "ok" if (upstream_ok and db_ok) else "degraded"
+    log.info(  # NEW
+        "route.healthcheck status=%s upstream_ok=%s db_ok=%s character_count=%d",
+        status,
+        upstream_ok,
+        db_ok,
+        total,
+    )
 
     return {
-        "status": "ok" if (upstream_ok and db_ok) else "degraded",
+        "status": status,
         "upstream_ok": upstream_ok,
         "db_ok": db_ok,
         "character_count": total,
@@ -210,10 +224,32 @@ async def characters(
         rows, total_count = await crud.list_characters(
             session, sort, order, page, page_size
         )
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid sort parameter or query")
+    except Exception as exc:
+        log.info(
+            "route.characters bad_request sort=%s order=%s page=%d page_size=%d error=%r",
+            sort,
+            order,
+            page,
+            page_size,
+            exc,
+        )
+
+        raise HTTPException(
+            status_code=400, detail="Invalid sort parameter or query"
+        ) from exc
 
     total_pages = max(1, math.ceil(total_count / page_size))
+
+    log.info(
+        "route.characters sort=%s order=%s page=%d page_size=%d returned=%d total=%d pages=%d",
+        sort,
+        order,
+        page,
+        page_size,
+        len(rows),
+        total_count,
+        total_pages,
+    )
 
     return {
         "page": page,

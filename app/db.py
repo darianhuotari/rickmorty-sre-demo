@@ -24,9 +24,11 @@ from __future__ import annotations
 
 import os
 import asyncio
+import logging
 from typing import AsyncIterator
 
-from sqlalchemy import text
+from sqlalchemy import text, event
+from sqlalchemy.engine.url import make_url, URL
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     create_async_engine,
@@ -34,6 +36,8 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.pool import StaticPool, NullPool
+
+log = logging.getLogger(__name__)
 
 # --------------------------------------------------------------------------------------
 # Configuration
@@ -52,6 +56,52 @@ class Base(DeclarativeBase):
     """Declarative base for ORM models."""
 
     pass
+
+
+def _safe_url_parts(url_str: str) -> dict:  # NEW
+    """Parse an SQLAlchemy URL and return non-sensitive parts for logging."""
+    try:
+        u: URL = make_url(url_str)
+        return {
+            "driver": u.drivername or "",
+            "host": u.host or "",
+            "port": u.port or "",
+            "database": u.database or "",
+        }
+    except Exception:
+        return {"driver": "unknown", "host": "", "port": "", "database": ""}
+
+
+def _register_engine_listeners(eng) -> None:
+    """Attach basic connect/dispose logs; safely no-op for dummy engines."""
+    try:
+        sync_eng = eng.sync_engine  # real AsyncEngine has this
+    except Exception:
+        # Tests may inject a dummy object without sync_engine
+        log.debug("db.listeners skipped: engine has no sync_engine (test/dummy)")
+        return
+
+    @event.listens_for(sync_eng, "connect")
+    def _on_connect(dbapi_conn, conn_record):
+        parts = _safe_url_parts(str(eng.url))
+        log.info(
+            "db.connect driver=%s host=%s port=%s db=%s",
+            parts["driver"],
+            parts["host"],
+            parts["port"],
+            parts["database"],
+        )
+
+    @event.listens_for(sync_eng, "engine_disposed")
+    def _on_dispose(engine):
+        parts = _safe_url_parts(str(eng.url))
+        log.info(
+            "db.dispose driver=%s host=%s port=%s db=%s",
+            parts["driver"],
+            parts["host"],
+            parts["port"],
+            parts["database"],
+        )
 
 
 def _mk_engine(url: str):
@@ -76,7 +126,26 @@ def _mk_engine(url: str):
         if pool_recycle is not None:
             kwargs["pool_recycle"] = int(pool_recycle)
 
-    return create_async_engine(url, **kwargs)
+    eng = create_async_engine(url, **kwargs)
+
+    # Defensive: tests may inject a dummy engine without .sync_engine, or
+    # a monkeypatch may intentionally raise. Don’t crash; log and continue.
+    try:
+        _register_engine_listeners(eng)
+    except Exception as exc:
+        log.debug("db.listeners registration failed: %r", exc)
+
+    parts = _safe_url_parts(url)
+    log.debug(
+        "db.engine_created driver=%s host=%s port=%s db=%s kwargs=%s",
+        parts["driver"],
+        parts["host"],
+        parts["port"],
+        parts["database"],
+        {k: kwargs[k] for k in sorted(kwargs)},
+    )
+
+    return eng
 
 
 # Global engine/session factory (reconfigurable in tests)
@@ -91,6 +160,14 @@ def configure_engine(url: str) -> None:
     SessionLocal = async_sessionmaker(
         engine, expire_on_commit=False, class_=AsyncSession
     )
+    parts = _safe_url_parts(url)
+    log.info(
+        "db.engine_reconfigured driver=%s host=%s port=%s db=%s",
+        parts["driver"],
+        parts["host"],
+        parts["port"],
+        parts["database"],
+    )
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:
@@ -102,6 +179,15 @@ async def get_session() -> AsyncIterator[AsyncSession]:
 async def init_db() -> None:
     """Create all database tables for registered ORM models."""
     from . import models  # noqa: F401 (import registers metadata)
+
+    parts = _safe_url_parts(str(engine.url))
+    log.info(
+        "db.init begin driver=%s host=%s port=%s db=%s",
+        parts["driver"],
+        parts["host"],
+        parts["port"],
+        parts["database"],
+    )
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -118,7 +204,8 @@ async def ping_db() -> bool:
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
         return True
-    except Exception:
+    except Exception as e:
+        log.debug("db.ping failed: %r", e)
         return False
 
 
@@ -131,6 +218,18 @@ async def wait_for_db(
     """Poll the database until `ping_db()` returns True or attempts are exhausted."""
     attempt = 0
     delay = backoff_start
+    parts = _safe_url_parts(str(engine.url))
+    log.info(
+        "db.wait start attempts=%d backoff_start=%.3fs backoff_max=%.3fs target=%s@%s:%s/%s",
+        max_attempts,
+        backoff_start,
+        backoff_max,
+        parts["driver"],
+        parts["host"],
+        parts["port"],
+        parts["database"],
+    )
+
     while attempt < max_attempts:
         if await ping_db():
             return

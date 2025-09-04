@@ -57,11 +57,11 @@ hpa:
 
 # --- App env configuration ---
 env:
-  CACHE_TTL: "300"
+  CACHE_TTL: "300"  # In-process cache TTL in seconds
   MAX_RETRIES: "5"
   REQUEST_TIMEOUT: "10"
-  REFRESH_WORKER_ENABLED: "1"
-  REFRESH_INTERVAL: "300"
+  REFRESH_WORKER_ENABLED: "1" # "1" to enable, "0" to disable
+  REFRESH_INTERVAL: "300" # main.py DB refresh task interval in seconds
   LOG_FILE_PATH: "/var/log/app/app.log"  # main container writes; sidecar tails
 
   # DB wait / startup backoff
