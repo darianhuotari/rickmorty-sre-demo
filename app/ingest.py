@@ -13,6 +13,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import api, crud
+from .page_cache import page_cache
 
 log = logging.getLogger(__name__)
 
@@ -21,7 +22,12 @@ _last_refresh_ts: float | None = None
 
 
 def last_refresh_age() -> float | None:
-    """Return seconds since last refresh (rounded) or None if never refreshed."""
+    """Return seconds since last refresh.
+
+    Returns:
+        Rounded seconds since the last successful refresh, or ``None`` if no
+        refresh has occurred.
+    """
     if _last_refresh_ts is None:
         return None
     return round(time.time() - _last_refresh_ts, 2)
@@ -82,6 +88,14 @@ async def initial_sync_if_empty(session: AsyncSession) -> int:
         filtered = api.filter_character_results(raw)
         n = await crud.upsert_characters(session, filtered)
 
+        # Invalidate per-pod page cache AFTER commit
+        if n:
+            try:
+                page_cache.invalidate_all()
+                log.debug("ingest.cache cleared after initial sync (upserted=%d)", n)
+            except Exception as exc:
+                log.debug("ingest.cache invalidate_failed error=%r", exc)
+
         global _last_refresh_ts
         _last_refresh_ts = time.time()
         log.info(
@@ -122,6 +136,14 @@ async def refresh_if_stale(session: AsyncSession) -> int:
         raw = await api.fetch_all_characters()
         filtered = api.filter_character_results(raw)
         n = await crud.upsert_characters(session, filtered)
+
+        # Invalidate per-pod page cache AFTER commit (only if data changed)
+        if n:
+            try:
+                page_cache.invalidate_all()
+                log.debug("ingest.cache cleared after refresh (upserted=%d)", n)
+            except Exception as exc:
+                log.debug("ingest.cache invalidate_failed error=%r", exc)
         _last_refresh_ts = time.time()
 
         log.info(

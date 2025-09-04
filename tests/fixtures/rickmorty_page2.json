@@ -1,0 +1,52 @@
+{
+  "info": {
+    "count": 826,
+    "pages": 2,
+    "next": null,
+    "prev": "https://rickandmortyapi.com/api/character?page=1"
+  },
+  "results": [
+    {
+      "id": 8,
+      "name": "Abradolf Lincler",
+      "status": "Alive",
+      "species": "Human",
+      "origin": { "name": "Earth (Replacement Dimension)" }
+    },
+    {
+      "id": 9,
+      "name": "Tammy Guetermann",
+      "status": "Alive",
+      "species": "Human",
+      "origin": { "name": "Earth (C-500A)" }
+    },
+    {
+      "id": 10,
+      "name": "Squanchy",
+      "status": "Alive",
+      "species": "Cat-Person",
+      "origin": { "name": "Squanch" }
+    },
+    {
+      "id": 11,
+      "name": "Evil Morty",
+      "status": "Alive",
+      "species": "Human",
+      "origin": { "name": "Earth (Evil Dimension)" }
+    },
+    {
+      "id": 12,
+      "name": "Krombopulos Michael",
+      "status": "Dead",
+      "species": "Gromflomite",
+      "origin": { "name": "Gromflom Prime" }
+    },
+    {
+      "id": 13,
+      "name": "Noob-Noob",
+      "status": "Alive",
+      "species": "Alien",
+      "origin": { "name": "Unknown" }
+    }
+  ]
+}
