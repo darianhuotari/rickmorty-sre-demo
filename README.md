@@ -7,15 +7,9 @@ Cleanup helm chart(s)?
 
 connection draining to allow client requests time to complete?
 
-Add logging for connected to DB; log out DB host (construct conn string?)
-
 Add DB TTL as env var / configurable via Helm
 
-Code security / quality checks in CI
-
 Dependency manager in CI
-
-lightweight image scan (Trivy)
 
 Note on using docker-compose & that an in-memory DB is used
 
@@ -37,81 +31,109 @@ Simplify helm chart layout?
 
 Run locally: uvicorn app.main:app --reload --port 8000
 
+# Rick & Morty SRE Demo
 
+A demo application that integrates with the [Rick and Morty API](https://rickandmortyapi.com/documentation/#rest).
 
-# Bring local kind cluster online:
+---
 
-kind create cluster --name rm
+## 🚀 Overview
 
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+- **FastAPI** service providing REST endpoints.
+- **Database caching** with Postgres (default in Kind) or SQLite (fallback in local dev).
+- **Refresh pipeline** to keep data up to date.
+- **Health checks** for liveness and readiness.
+- **Tests**: unit + end-to-end (Kind cluster).
+- **CI/CD**: GitHub Actions with linting, tests, security scanning, e2e validation, and Docker Hub publishing.
 
-kubectl apply -f .\deploy\shim\ingress-nginx-configmap.yaml
-kubectl -n ingress-nginx rollout restart deploy/ingress-nginx-controller
+---
 
-helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
-helm repo update
+## ✨ Features
 
-helm upgrade --install metrics-server metrics-server/metrics-server `
-   -n kube-system --create-namespace `
-   -f .\deploy\shim\metrics-server-args-patch.yaml
+- REST API with cached responses from Rick & Morty API.
+- Database backend (Postgres or SQLite).
+- Health endpoints:
+  - `/healthz` – liveness
+  - `/healthcheck` – readiness
+- Unit, integration, and e2e test coverage.
+- Security checks:
+  - [`bandit`](https://bandit.readthedocs.io/)
+  - [`pip-audit`](https://pypi.org/project/pip-audit/)
+  - [`trivy`](https://aquasecurity.github.io/trivy/)
 
-helm repo add bitnami https://charts.bitnami.com/bitnami
+---
 
-cd deploy\helm\rickmorty
+## 🛠 Getting Started
 
-helm repo update
+### Prerequisites
+- Python 3.12+
+- [Docker](https://docs.docker.com/get-docker/)
+- [Kind](https://kind.sigs.k8s.io/) (for Kubernetes testing)
+- `make`
 
-cd ..\..\..\
+### Local Development (venv)
+```bash
+make dev       # install runtime + dev deps
+make run       # start FastAPI app on http://localhost:8000
+```
 
-docker build -t rickmorty-sre-demo:latest .
+### Kubernetes (Kind)
+```bash
+make kind-up      # create cluster + deploy app
+make test-e2e     # run e2e tests
+make kind-down    # cleanup cluster
+```
 
-kind load docker-image rickmorty-sre-demo:latest --name rm
+### ✅ Tests & Quality
+```bash
+make lint         # black / flake8 lint
+make format       # black format
 
-helm upgrade --install rm ./deploy/helm/rickmorty -n rm --create-namespace --set postgresql.enabled=true --set image.repository=rickmorty-sre-demo --set image.tag=latest
+make test         # unit / integration tests; outputs coverage report
+make test-e2e     # e2e tests; requres kind cluster to be online (see Kubernetes (Kind) section)
 
-kubectl -n rm logs deploy/rickmorty-rm -c app -f
+make security     # Bandit / pip-audit scans
+```
 
-kubectl -n ingress-nginx port-forward svc/ingress-nginx-controller 8080:80
+### 🔄 CI/CD
 
+GitHub Actions pipeline includes:
 
+- Lint + unit tests on PR and main.
 
+- Security scan (Bandit + pip-audit) on PRs.
 
-# Bring local kind cluster online:
+- End-to-end tests in Kind when relevant paths change.
 
-kind create cluster --name rm
+- Trivy image scan before publishing to Docker Hub.
 
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+- Docker images tagged by commit SHA and main.
 
-kubectl apply -f .\deploy\shim\ingress-nginx-configmap.yaml
-kubectl -n ingress-nginx rollout restart deploy/ingress-nginx-controller
+### 📦 Deployment
 
-helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
-helm repo update
+- Helm chart: deploy/helm/rickmorty
 
-helm upgrade --install metrics-server metrics-server/metrics-server `
-   -n kube-system --create-namespace `
-   -f .\deploy\shim\metrics-server-args-patch.yaml
+- Example:
 
-helm repo add bitnami https://charts.bitnami.com/bitnami
+<example here>
 
-cd deploy\helm\rickmorty
+- Secrets:
 
-helm repo update
+    - Database credentials (default dev values provided for running in Kind).
 
-cd ..\..\..\
+    - Override with Vault or Kubernetes secrets in production.
+    
+### 🤝 Contributing
 
-docker build -t rickmorty-sre-demo:latest .
+Code style: Black, Flake8
 
-kind load docker-image rickmorty-sre-demo:latest --name rm
+Run make lint before pushing.
 
-helm upgrade --install rm ./deploy/helm/rickmorty -n rm --create-namespace --set postgresql.enabled=true --set image.repository=rickmorty-sre-demo --set image.tag=latest
+PRs must pass lint, tests, and security checks.
 
-kubectl -n rm logs deploy/rickmorty-rm -c app -f
+### 🙏 Credits
 
-kubectl -n ingress-nginx port-forward svc/ingress-nginx-controller 8080:80
-
-
-kind delete cluster --name -rm
+[Rick and Morty API](https://rickandmortyapi.com/documentation/#rest) for the data source.
 
 
 # Load test:

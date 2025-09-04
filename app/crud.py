@@ -5,10 +5,14 @@ async and accept an `AsyncSession`. Queries are written to be portable across
 SQLite (tests/dev) and Postgres (dev/prod).
 """
 
+import logging
+
 from typing import Iterable, List, Dict, Any, Tuple
 from sqlalchemy import select, func, asc, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from .models import Character
+
+log = logging.getLogger(__name__)
 
 
 def _row_to_dict(c: Character) -> Dict[str, Any]:
@@ -42,7 +46,9 @@ async def count_characters(session: AsyncSession) -> int:
     """
     q = select(func.count()).select_from(Character)
     res = await session.execute(q)
-    return int(res.scalar_one())
+    total = int(res.scalar_one())
+    log.debug("crud.count_characters total=%d", total)
+    return total
 
 
 async def upsert_characters(
@@ -65,6 +71,7 @@ async def upsert_characters(
         await session.merge(Character(**it))
         n += 1
     await session.commit()
+    log.info("crud.upsert_characters processed=%d", n)
     return n
 
 
@@ -105,4 +112,13 @@ async def list_characters(
     )
     res = await session.execute(q)
     rows = [_row_to_dict(row[0]) for row in res.fetchall()]
+    log.info(
+        "crud.list_characters sort=%s order=%s page=%d page_size=%d returned=%d total=%d",
+        sort,
+        order,
+        page,
+        page_size,
+        len(rows),
+        total,
+    )
     return rows, total
