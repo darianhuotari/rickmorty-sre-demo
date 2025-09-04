@@ -5,7 +5,9 @@ Covers:
 * Deep healthcheck behavior for OK vs degraded states.
 """
 
+import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import ProgrammingError
 import app.main as app_main
 from app import api, crud, ingest
 
@@ -108,3 +110,21 @@ def test_healthz_always_ok():
     resp = client.get("/healthz")
     assert resp.status_code == 200
     assert resp.json() == {"status": "ok"}
+
+
+@pytest.mark.asyncio
+async def test_characters_500_on_db_programming_error(
+    monkeypatch, test_app, test_client
+):
+    # Clear cache so the route really calls into crud.list_characters
+    app_main.page_cache.invalidate_all()
+
+    async def boom(*a, **k):
+        raise ProgrammingError("SELECT 1", {}, None)  # (sql, params, orig)
+
+    monkeypatch.setattr(crud, "list_characters", boom)
+
+    r = await test_client.get("/characters?sort=id&order=asc&page=1&page_size=10")
+    assert r.status_code == 500
+    body = r.json()
+    assert body["detail"] == "Database error."

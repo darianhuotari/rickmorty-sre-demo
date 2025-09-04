@@ -10,6 +10,7 @@ if ROOT not in sys.path:
 import pytest_asyncio
 import json
 import pathlib
+import httpx
 
 from contextlib import asynccontextmanager
 
@@ -69,3 +70,20 @@ async def memory_db_and_overrides(monkeypatch):
 
     # Cleanup dependency override
     app_main.app.dependency_overrides.pop(app_main.get_session, None)
+
+
+@pytest_asyncio.fixture
+async def test_app():
+    # Use the already-imported app with your in-memory DB overrides + test lifespan
+    from app.main import app as _app
+
+    yield _app
+
+
+@pytest_asyncio.fixture
+async def test_client(test_app):
+    transport = httpx.ASGITransport(app=test_app)
+    async with httpx.AsyncClient(
+        transport=transport, base_url="http://testserver"
+    ) as c:
+        yield c

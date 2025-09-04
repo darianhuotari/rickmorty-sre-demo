@@ -13,7 +13,7 @@ spec:
     rollingUpdate:
       maxUnavailable: 0 # always keep all old pods running until new ones are ready
       maxSurge: 50%  # allow extra pods during rollout
-    minReadySeconds: 10 # wait before marking pod available
+      minReadySeconds: 10 # wait before marking pod available
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ .Chart.Name }}

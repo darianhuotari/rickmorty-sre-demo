@@ -15,8 +15,6 @@ Note on using docker-compose & that an in-memory DB is used in unit-tests
 
 Manually test behavior for invalid gets on /character; add unit / int tests if necessary
 
-Add an in-process cache + expose config to Helm
-
 /metrics endpoint (with 1–2 custom metrics).
 
 Grafana dashboard JSON.

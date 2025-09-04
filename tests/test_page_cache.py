@@ -1,4 +1,3 @@
-# tests/test_page_cache.py
 from __future__ import annotations
 
 import asyncio
@@ -9,6 +8,8 @@ import pytest
 from app.db import get_session
 from app import ingest, api, crud
 from app.page_cache import PageCache, PageKey
+
+import app.main as main
 
 
 def test_page_key_is_structured_and_hashable():
@@ -296,3 +297,34 @@ async def test_refresh_invalidation_failure_is_swallowed(monkeypatch):
         break
 
     assert n == 1  # error was swallowed, not propagated
+
+
+@pytest.mark.asyncio
+async def test_characters_ignores_page_cache_failures_and_hits_db(
+    monkeypatch, test_app, test_client
+):
+    def boom(*a, **k):
+        raise RuntimeError("cache offline")
+
+    # Patch the alias used by the /characters route
+    monkeypatch.setattr(main.page_cache, "get", boom)
+    monkeypatch.setattr(main.page_cache, "put", boom)
+
+    async def fake_list(_session, sort, order, page, page_size):
+        return ([{"id": 1, "name": "Rick Sanchez"}], 1)
+
+    monkeypatch.setattr(crud, "list_characters", fake_list)
+
+    r = await test_client.get("/characters?sort=id&order=asc&page=1&page_size=10")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["total_count"] == 1
+    assert data["results"][0]["id"] == 1
+
+    # Optional: check metrics if you installed them
+    m = await test_client.get("/metrics")
+    assert m.status_code == 200
+    assert (
+        'cache_errors_total{cache="page",op="get"}' in m.text
+        or 'cache_errors_total{cache="page",op="put"}' in m.text
+    )

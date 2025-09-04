@@ -4,3 +4,4 @@ httpx
 sqlalchemy>=2.0
 asyncpg
 aiosqlite     # used for local/dev tests if DATABASE_URL not set
+prometheus_client
