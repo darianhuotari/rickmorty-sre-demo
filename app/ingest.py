@@ -2,6 +2,8 @@
 
 Composes the upstream API client (fetch/filter) with CRUD upserts to populate
 and periodically refresh the local database.
+We do not stop serving data if the upstream API is down; we just skip the
+refresh and try again later.
 """
 
 import os
