@@ -219,7 +219,7 @@ async def get_characters() -> List[Dict[str, Any]]:
     filtered = filter_character_results(raw)
 
     _cache["ts"] = time.time()
-    _cache["data"] = filtered
+    _cache["data"] = filtered # We cache the filtered results so we don't have to filter on every request
     return filtered
 
 

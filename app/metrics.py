@@ -37,7 +37,7 @@ LAST_REFRESH_AGE_G = Gauge(
 )
 
 
-# --- Public helpers your routes can call ---
+# --- Public helpers our routes can call ---
 def record_cache_hit(path="/characters"):
     CACHE_HITS.labels(path=path).inc()
 
