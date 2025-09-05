@@ -1,5 +1,9 @@
 # RICKMORTY-SRE-DEMO
 
+[![CI](https://github.com/darianhuotari/rickmorty-sre-demo/actions/workflows/ci.yml/badge.svg)](https://github.com/darianhuotari/rickmorty-sre-demo/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/darianhuotari/rickmorty-sre-demo/actions/workflows/codeql.yml/badge.svg)](https://github.com/darianhuotari/rickmorty-sre-demo/actions/workflows/codeql.yml)
+[![Dependabot](https://img.shields.io/badge/Dependabot-enabled-brightgreen)](https://github.com/darianhuotari/rickmorty-sre-demo/security/dependabot)
+
 A demo application that integrates with the [Rick and Morty API](https://rickandmortyapi.com/documentation/#rest).
 
 ---
@@ -14,7 +18,7 @@ A demo application that integrates with the [Rick and Morty API](https://rickand
 - **Tests**: unit / integration, end-to-end (Kind cluster).
 - **CI/CD**: GitHub Actions with linting, tests, security scanning, e2e validation, and Docker Hub publishing.
 - ✅ [Take-home checklist here!](checklist.md)
-- 🏭 [Production discussion items here!](production_discussion.md)
+- 🏭 [Production discussion items here!](production_roadmap.md)
 
 ---
 
@@ -31,6 +35,7 @@ A demo application that integrates with the [Rick and Morty API](https://rickand
   - [`bandit`](https://bandit.readthedocs.io/)
   - [`pip-audit`](https://pypi.org/project/pip-audit/)
   - [`trivy`](https://aquasecurity.github.io/trivy/)
+  - **CodeQL** (GitHub code scanning; Python 3.12 profile)
 
 ---
 
@@ -175,6 +180,8 @@ GitHub Actions pipeline includes:
 - End-to-end tests in Kind when relevant paths change
 - Trivy image scan before publishing to Docker Hub
 - Docker images tagged by commit SHA and `latest`
+- CodeQL code scanning (Python 3.12) on push/PR/schedule
+- Dependabot (pip, GitHub Actions, Docker) — weekly grouped updates
 
 ---
 

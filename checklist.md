@@ -234,3 +234,19 @@ secrets:
 - **Paths**: e2e runs when `app/**`, `deploy/helm/**`, `.github/workflows/**` change.
 
 ---
+
+## 🔐 Security & Maintenance Automation
+
+- [ ] **Dependabot enabled** (`.github/dependabot.yml`) for:
+  - [ ] pip (runtime + dev)
+  - [ ] GitHub Actions
+  - [ ] Docker base images
+  - [ ] Uses **weekly** schedule and grouped updates
+- [ ] **CodeQL scanning** (`.github/workflows/codeql.yml`)
+  - [ ] Runs on **Python 3.12** only
+  - [ ] Triggers on push to `main`, PRs to `main`, and weekly schedule
+  - [ ] `permissions: security-events: write` set in workflow
+- [ ] (Optional) Make **CodeQL** a required status check on `main`
+- [ ] (Optional) Enable branch protection rules (require CI + CodeQL to pass)
+
+---
