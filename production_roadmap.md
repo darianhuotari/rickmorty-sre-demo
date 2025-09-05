@@ -95,9 +95,15 @@
   Rollout rollback, cache flush policy, DB failover, trace/log triage checklists; on-call schedule defined.  
   **Done when:** runbooks exist and have been dry-run.
 
+- [ ] **WAF (monitor-only) in pre-prod/staging**
+  Enable WAF (cloud WAF or NGINX Ingress + ModSecurity/OWASP CRS) in **log-only** mode on pre-prod/staging.
+  Exclude non-user paths (`/healthz`, `/metrics`), set request/URI/body size limits, start with CRS Paranoia Level 1.
+  Stream logs to observability (dashboards + alerts) and manage config in Git.
+  **Done when:** false-positive rate is low on representative load; necessary exceptions documented; dashboards and alerts exist.
+
 ---
 
-## Month-1 Enhancements
+## Months 1 & 2 Enhancements
 **Goal:** Deep visibility, failure practice, and data-layer resilience.
 
 - [ ] **Distributed tracing**  
@@ -120,6 +126,19 @@
 - [ ] **Data layer hardening / HA**  
   If TLS wasn’t enabled earlier, finish it now; add HA/failover plan and drill.  
   **Done when:** failover drill works and docs are current.
+
+- [ ] **WAF in prod (canary → blocking)**
+  Roll out WAF to prod behind a canary (e.g., 10% → 50% → 100%). Start in monitor-only, then switch to blocking once FP < agreed threshold and critical paths are tuned.
+  Add basic bot/rate-limits as needed; alert on WAF block spikes; tie into progressive delivery gates for auto-halt/auto-rollback.
+  **Done when:** blocking enabled at 100% with acceptable FP rate; rollback/runbook verified.
+
+- [ ] **Baseline NetworkPolicies (default-deny + allowlist)**
+  Apply namespace-scoped default-deny for **ingress & egress**, then allow only:
+  • ingress from ingress controller (and monitoring) to app port(s)  
+  • egress to DNS (kube-dns), Postgres/Redis (if used), OTLP/Prometheus endpoints, and required external APIs over 443  
+  Include node-origin health probes if needed (node/cluster CIDR).
+  **Done when:** expected traffic flows (app, probes, scraping) pass; blocked egress is observable; policies live in Git.
+
 
 ---
 
