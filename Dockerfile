@@ -1,5 +1,5 @@
 # --- Builder: install deps into a local venv (cache friendly) ---
-FROM python:3.12-slim AS builder
+FROM python:3.13-slim AS builder
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_NO_CACHE_DIR=1 \
     VENV=/opt/venv
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential \
@@ -12,7 +12,7 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 # --- Runtime image: copy venv + source, run as non-root ---
-FROM python:3.12-slim
+FROM python:3.13-slim
 ENV VENV=/opt/venv
 ENV PATH="$VENV/bin:$PATH"
 # Create a non-root user
