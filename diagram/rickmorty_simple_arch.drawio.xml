@@ -1,0 +1,85 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:144.0) Gecko/20100101 Firefox/144.0" version="28.0.6">
+  <diagram name="Page-1" id="jj6e_tLtAcAmMPAuehlJ">
+    <mxGraphModel dx="1426" dy="759" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="TTN3gmx_ziTmAoZEU-VZ-31" value="Kubernetes" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=bottom;align=left;" vertex="1" parent="1">
+          <mxGeometry x="160" y="140" width="680" height="350" as="geometry" />
+        </mxCell>
+        <mxCell id="TTN3gmx_ziTmAoZEU-VZ-9" value="Pod(s)" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=bottom;" vertex="1" parent="1">
+          <mxGeometry x="425" y="160" width="260" height="263.75" as="geometry" />
+        </mxCell>
+        <mxCell id="TTN3gmx_ziTmAoZEU-VZ-3" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="TTN3gmx_ziTmAoZEU-VZ-1" target="TTN3gmx_ziTmAoZEU-VZ-2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="TTN3gmx_ziTmAoZEU-VZ-1" value="Client" style="whiteSpace=wrap;html=1;aspect=fixed;" vertex="1" parent="1">
+          <mxGeometry x="50" y="280" width="80" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="TTN3gmx_ziTmAoZEU-VZ-5" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="TTN3gmx_ziTmAoZEU-VZ-2" target="TTN3gmx_ziTmAoZEU-VZ-4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="TTN3gmx_ziTmAoZEU-VZ-2" value="&lt;div&gt;Ingress&lt;/div&gt;&lt;div&gt;(NGINX)&lt;/div&gt;" style="rhombus;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="180" y="265" width="110" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="TTN3gmx_ziTmAoZEU-VZ-10" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="TTN3gmx_ziTmAoZEU-VZ-4" target="TTN3gmx_ziTmAoZEU-VZ-11">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="TTN3gmx_ziTmAoZEU-VZ-4" value="&lt;div&gt;Service&lt;/div&gt;&lt;div&gt;(ClusterIP)&lt;/div&gt;" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="320" y="280" width="80" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="TTN3gmx_ziTmAoZEU-VZ-19" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=classic;startFill=1;" edge="1" parent="1" source="TTN3gmx_ziTmAoZEU-VZ-11" target="TTN3gmx_ziTmAoZEU-VZ-18">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="TTN3gmx_ziTmAoZEU-VZ-24" value="[1]" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="TTN3gmx_ziTmAoZEU-VZ-19">
+          <mxGeometry x="-0.2286" relative="1" as="geometry">
+            <mxPoint x="-1" y="6" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="TTN3gmx_ziTmAoZEU-VZ-26" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;startArrow=classic;startFill=1;" edge="1" parent="1" source="TTN3gmx_ziTmAoZEU-VZ-11" target="TTN3gmx_ziTmAoZEU-VZ-25">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="TTN3gmx_ziTmAoZEU-VZ-27" value="[2]" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="TTN3gmx_ziTmAoZEU-VZ-26">
+          <mxGeometry x="-0.3147" y="-1" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="TTN3gmx_ziTmAoZEU-VZ-11" value="&lt;div&gt;FastAPI&lt;/div&gt;&lt;div&gt;App&lt;/div&gt;&lt;div&gt;(async)&lt;/div&gt;" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;" vertex="1" parent="1">
+          <mxGeometry x="450" y="280" width="80" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="TTN3gmx_ziTmAoZEU-VZ-15" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="TTN3gmx_ziTmAoZEU-VZ-12" target="TTN3gmx_ziTmAoZEU-VZ-11">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="TTN3gmx_ziTmAoZEU-VZ-12" value="&lt;div&gt;Refresher Task&lt;/div&gt;&lt;div&gt;(5 minute timer)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="440" y="200" width="100" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="TTN3gmx_ziTmAoZEU-VZ-21" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=classic;startFill=1;" edge="1" parent="1" source="TTN3gmx_ziTmAoZEU-VZ-18" target="TTN3gmx_ziTmAoZEU-VZ-20">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="TTN3gmx_ziTmAoZEU-VZ-18" value="&lt;div&gt;In-process Page&lt;/div&gt;&lt;div&gt;Cache (LRU / TTL)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="570" y="320" width="100" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="TTN3gmx_ziTmAoZEU-VZ-20" value="&lt;div&gt;Postgres DB&lt;/div&gt;(SQL, async)" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="710" y="315" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="TTN3gmx_ziTmAoZEU-VZ-22" value="&lt;div&gt;Fluentbit Sidecar&lt;/div&gt;&lt;div&gt;(Unused)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="425" y="383.75" width="100" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="TTN3gmx_ziTmAoZEU-VZ-29" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=1;entryDx=0;entryDy=0;startArrow=classic;startFill=1;" edge="1" parent="1" source="TTN3gmx_ziTmAoZEU-VZ-25" target="TTN3gmx_ziTmAoZEU-VZ-30">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="610" y="140" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="TTN3gmx_ziTmAoZEU-VZ-25" value="&lt;div&gt;Upstream API&lt;/div&gt;&lt;div&gt;Cache (TTL)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="210" width="100" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="TTN3gmx_ziTmAoZEU-VZ-30" value="&lt;div&gt;External Rick &amp;amp; Morty&lt;/div&gt;&lt;div&gt;API&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="550" y="40" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="TTN3gmx_ziTmAoZEU-VZ-33" value="&lt;div&gt;/metrics&lt;/div&gt;&lt;div&gt;(prom endpoint)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="595" y="383.75" width="90" height="40" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
